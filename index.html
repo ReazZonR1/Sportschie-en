@@ -10,9 +10,12 @@
   nav button.active { border-bottom:3px solid #d32f2f; }
   .tab { display:none; padding:20px; }
   .tab.active { display:block; }
+  .zentriert { 
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 70vh;
+  }
   .controls { display:flex; flex-direction:column; gap:10px; max-width:300px; margin-top:10px; }
   select,input,button.action { width:100%; padding:8px; font-size:1em; box-sizing:border-box; }
-  #serieButtons { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+  #serieButtons { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; justify-content:center; }
   #serieButtons button { background:#444; color:white; padding:4px 10px; border:none; border-radius:4px; cursor:pointer; font-size:.9em; }
   #serieButtons button.activeSerie { outline:2px solid white; }
   .punktliste, .liste { margin-top:20px; background:#1e1e1e; border-radius:8px; padding:10px; max-width:300px; }
@@ -44,31 +47,33 @@
 
 <!-- TAB 1 -->
 <div id="tab1" class="tab active">
-  <h1>Zielscheibe</h1>
-  <div class="controls">
-    <select id="waffenSelect"><option>Waffe wählen</option></select>
-    <select id="munitionSelect"><option>Munition wählen</option></select>
-    <select id="entfernungSelect"><option>25 m</option><option>50 m</option><option>100 m</option><option>300 m</option></select>
-    <select id="standortSelect"><option>Gondsroth</option><option>Jügesheim</option><option>Mittelbuchen</option><option>Klein-Welzheim</option><option>Arlsfeld</option></select>
-    <div id="serieButtons"></div>
-    <button class="action" id="resetSerienBtn">Serien zurücksetzen</button>
-  </div>
-  <svg id="scheibe" width="300" height="300" viewBox="0 0 300 300">
-    <circle cx="150" cy="150" r="130" stroke="white" fill="none"/>
-    <circle cx="150" cy="150" r="100" stroke="white" fill="none"/>
-    <circle cx="150" cy="150" r="70" stroke="white" fill="none"/>
-    <circle cx="150" cy="150" r="40" stroke="white" fill="none"/>
-    <circle cx="150" cy="150" r="10" stroke="white" fill="none"/>
-    <text x="150" y="50" fill="white" text-anchor="middle">7</text>
-    <text x="150" y="80" fill="white" text-anchor="middle">8</text>
-    <text x="150" y="110" fill="white" text-anchor="middle">9</text>
-    <text x="150" y="140" fill="white" text-anchor="middle">10</text>
-  </svg>
-  <div class="punktliste">
-    <h3>Treffer Punkte (aktive Serie)</h3><ul id="punkte"></ul>
-    <div class="gesamt" id="gesamtPunkte">Gesamt: 0 Punkte</div>
-    <button class="action" id="letztenTrefferLoeschen">Letzten Treffer löschen</button>
-    <button class="action" id="ergebnisSpeichern">Ergebnis speichern</button>
+  <div class="zentriert">
+    <h1>Zielscheibe</h1>
+    <div class="controls">
+      <select id="waffenSelect"><option>Waffe wählen</option></select>
+      <select id="munitionSelect"><option>Munition wählen</option></select>
+      <select id="entfernungSelect"><option>25 m</option><option>50 m</option><option>100 m</option><option>300 m</option></select>
+      <select id="standortSelect"><option>Gondsroth</option><option>Jügesheim</option><option>Mittelbuchen</option><option>Klein-Welzheim</option><option>Arlsfeld</option></select>
+      <div id="serieButtons"></div>
+      <button class="action" id="resetSerienBtn">Serien zurücksetzen</button>
+    </div>
+    <svg id="scheibe" width="420" height="420" viewBox="0 0 420 420">
+      <circle cx="210" cy="210" r="200" stroke="white" fill="none"/>
+      <circle cx="210" cy="210" r="150" stroke="white" fill="none"/>
+      <circle cx="210" cy="210" r="100" stroke="white" fill="none"/>
+      <circle cx="210" cy="210" r="50"  stroke="white" fill="none"/>
+      <circle cx="210" cy="210" r="15"  stroke="white" fill="none"/>
+      <text x="210" y="35"  fill="white" text-anchor="middle" font-size="20">7</text>
+      <text x="210" y="70"  fill="white" text-anchor="middle" font-size="20">8</text>
+      <text x="210" y="120" fill="white" text-anchor="middle" font-size="20">9</text>
+      <text x="210" y="165" fill="white" text-anchor="middle" font-size="20">10</text>
+    </svg>
+    <div class="punktliste">
+      <h3>Treffer Punkte (aktive Serie)</h3><ul id="punkte"></ul>
+      <div class="gesamt" id="gesamtPunkte">Gesamt: 0 Punkte</div>
+      <button class="action" id="letztenTrefferLoeschen">Letzten Treffer löschen</button>
+      <button class="action" id="ergebnisSpeichern">Ergebnis speichern</button>
+    </div>
   </div>
 </div>
 
@@ -187,12 +192,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const r = svg.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    const d = Math.hypot(x - 150, y - 150);
-    const w = d <= 40 ? 10 : d <= 70 ? 9 : d <= 100 ? 8 : d <= 130 ? 7 : 6;
+    const d = Math.hypot(x - 210, y - 210);
+    const w = d <= 50 ? 10 : d <= 100 ? 9 : d <= 150 ? 8 : d <= 200 ? 7 : 6;
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     c.setAttribute('cx', x);
     c.setAttribute('cy', y);
-    c.setAttribute('r', 5);
+    c.setAttribute('r', 3);
     c.setAttribute('fill', colors[aktive]);
     c.setAttribute('class', 'treffer');
     svg.appendChild(c);
