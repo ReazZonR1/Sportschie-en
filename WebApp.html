@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Schieß-App mit Serien & Verwaltung</title>
+<style>
+  body { background: #121212; color: white; font-family: sans-serif; margin: 0; }
+  nav { display:flex; justify-content:center; background:#1e1e1e; padding:10px; flex-wrap: wrap; }
+  nav button { background:none; border:none; color:white; padding:10px 20px; cursor:pointer; }
+  nav button.active { border-bottom:3px solid #d32f2f; }
+  .tab { display:none; padding:20px; }
+  .tab.active { display:block; }
+  .controls { display:flex; flex-direction:column; gap:10px; max-width:300px; margin-top:10px; }
+  select,input,button.action { width:100%; padding:8px; font-size:1em; box-sizing:border-box; }
+  #serieButtons { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+  #serieButtons button { background:#444; color:white; padding:4px 10px; border:none; border-radius:4px; cursor:pointer; font-size:.9em; }
+  #serieButtons button.activeSerie { outline:2px solid white; }
+  .punktliste, .liste { margin-top:20px; background:#1e1e1e; border-radius:8px; padding:10px; max-width:300px; }
+  .gesamt { font-weight:bold; font-size:1.1em; margin-top:10px; }
+  svg { margin-top:20px; }
+  .form-group { margin-bottom:15px; }
+  ul { padding-left:20px; }
+  ul li { margin-bottom:8px; }
+</style>
+</head>
+<body>
+<nav>
+  <button id="tab1Btn" class="active">🎯 Zielscheibe</button>
+  <button id="tab2Btn">🧰 Verwaltung</button>
+  <button id="tab3Btn">📊 Ergebnisse</button>
+</nav>
+
+<!-- TAB 1 -->
+<div id="tab1" class="tab active">
+  <h1>Zielscheibe</h1>
+  <div class="controls">
+    <select id="waffenSelect"><option>Waffe wählen</option></select>
+    <select id="munitionSelect"><option>Munition wählen</option></select>
+    <select id="entfernungSelect"><option>25 m</option><option>50 m</option><option>100 m</option><option>300 m</option></select>
+    <select id="standortSelect"><option>Gondsroth</option><option>Jügesheim</option><option>Mittelbuchen</option><option>Klein-Welzheim</option><option>Arlsfeld</option></select>
+    <div id="serieButtons"></div>
+    <button class="action" id="resetSerienBtn">Serien zurücksetzen</button>
+  </div>
+  <svg id="scheibe" width="300" height="300" viewBox="0 0 300 300">
+    <circle cx="150" cy="150" r="130" stroke="white" fill="none"/>
+    <circle cx="150" cy="150" r="100" stroke="white" fill="none"/>
+    <circle cx="150" cy="150" r="70" stroke="white" fill="none"/>
+    <circle cx="150" cy="150" r="40" stroke="white" fill="none"/>
+    <circle cx="150" cy="150" r="10" stroke="white" fill="none"/>
+    <text x="150" y="50" fill="white" text-anchor="middle">7</text>
+    <text x="150" y="80" fill="white" text-anchor="middle">8</text>
+    <text x="150" y="110" fill="white" text-anchor="middle">9</text>
+    <text x="150" y="140" fill="white" text-anchor="middle">10</text>
+  </svg>
+  <div class="punktliste">
+    <h3>Treffer Punkte (aktive Serie)</h3><ul id="punkte"></ul>
+    <div class="gesamt" id="gesamtPunkte">Gesamt: 0 Punkte</div>
+    <button class="action" id="letztenTrefferLoeschen">Letzten Treffer löschen</button>
+    <button class="action" id="ergebnisSpeichern">Ergebnis speichern</button>
+  </div>
+</div>
+
+<!-- TAB 2 -->
+<div id="tab2" class="tab">
+  <h2>Waffe hinzufügen</h2>
+  <div class="form-group"><label>Hersteller:</label><input id="hersteller"></div>
+  <div class="form-group"><label>Modell:</label><input id="modell"></div>
+  <div class="form-group"><label>Kaliber:</label><input id="kaliber"></div>
+  <div class="form-group"><label>Waffenart:</label><select id="waffenart"><option>Kurzwaffe</option><option>Langwaffe</option></select></div>
+  <button class="action" id="waffeSpeichern">Waffe speichern</button>
+  <div class="liste" id="waffenListe"></div>
+
+  <h2>Munition hinzufügen</h2>
+  <div class="form-group"><label>Bezeichnung:</label><input id="munitionName"></div>
+  <div class="form-group"><label>Kaliber:</label><input id="munitionKaliber"></div>
+  <div class="form-group"><label>Gewicht:</label><input id="munitionGewicht"></div>
+  <div class="form-group"><label>Typ:</label><select id="munitionArt"><option>Kurzwaffe</option><option>Langwaffe</option></select></div>
+  <div id="ballistik" style="display:none">
+    <h3>Ballistikdaten (Langwaffe)</h3>
+    <div class="form-group">
+      <label>V0/V100/V200/V300 (m/s):</label>
+      <input id="v0" type="number"><input id="v100" type="number"><input id="v200" type="number"><input id="v300" type="number">
+    </div>
+    <div class="form-group">
+      <label>E0/E100/E200/E300 (J):</label>
+      <input id="e0" type="number"><input id="e100" type="number"><input id="e200" type="number"><input id="e300" type="number">
+    </div>
+  </div>
+  <button class="action" id="munitionSpeichern">Munition speichern</button>
+  <div class="liste" id="munitionListe"></div>
+</div>
+
+<!-- TAB 3 -->
+<div id="tab3" class="tab">
+  <h2>Gespeicherte Ergebnisse</h2>
+  <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px;">
+    <label style="display:flex; flex-direction:column; font-size:0.95em;">
+      Standort filtern
+      <select id="filterStandort">
+        <option value="">Alle Standorte</option>
+        <option>Gondsroth</option>
+        <option>Jügesheim</option>
+        <option>Mittelbuchen</option>
+        <option>Klein-Welzheim</option>
+        <option>Arlsfeld</option>
+      </select>
+    </label>
+    <label style="display:flex; flex-direction:column; font-size:0.95em;">
+      Datum filtern
+      <input type="date" id="filterDatum" />
+    </label>
+    <button class="action" id="filterReset" style="height:38px;align-self:flex-end;">Filter zurücksetzen</button>
+  </div>
+  <div id="ergebnisListe"></div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const colors = ['red','blue','green','orange','purple','yellow','cyan','magenta','lime','gray'];
+  const serien = Array.from({length: 10}, () => []);
+  let aktive = 0;
+  const ergebnisse = [];
+  const waffen = [], munitionen = [];
+
+  // --- LOCALSTORAGE: Laden bei Start
+  if(localStorage.getItem('schiessAppWaffen')) {
+    waffen.push(...JSON.parse(localStorage.getItem('schiessAppWaffen')));
+  }
+  if(localStorage.getItem('schiessAppMunition')) {
+    munitionen.push(...JSON.parse(localStorage.getItem('schiessAppMunition')));
+  }
+  if(localStorage.getItem('schiessAppErgebnisse')) {
+    ergebnisse.push(...JSON.parse(localStorage.getItem('schiessAppErgebnisse')));
+  }
+
+  function persistData() {
+    localStorage.setItem('schiessAppWaffen', JSON.stringify(waffen));
+    localStorage.setItem('schiessAppMunition', JSON.stringify(munitionen));
+    localStorage.setItem('schiessAppErgebnisse', JSON.stringify(ergebnisse));
+  }
+
+  // Tabs
+  const tabs = Array.from(document.querySelectorAll('.tab'));
+  const tabButtons = Array.from(document.querySelectorAll('nav button'));
+  tabButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      tabButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      tabs.forEach(t => t.classList.remove('active'));
+      const tabId = btn.id.replace('Btn', '');
+      document.getElementById(tabId).classList.add('active');
+    });
+  });
+
+  // Serien-Buttons
+  const sb = document.getElementById('serieButtons');
+  sb.innerHTML = "";
+  for(let i=0;i<10;i++){
+    const b = document.createElement('button');
+    b.textContent = i+1; b.type='button'; b.style.backgroundColor = colors[i];
+    if(i===0) b.classList.add('activeSerie');
+    b.addEventListener('click',()=>{
+      aktive=i;
+      document.querySelectorAll('#serieButtons button').forEach((btn,idx)=>btn.classList.toggle('activeSerie',idx===aktive));
+      render();
+    });
+    sb.appendChild(b);
+  }
+
+  // Zielscheibe
+  const svg = document.getElementById('scheibe');
+  const ul = document.getElementById('punkte');
+  const ges = document.getElementById('gesamtPunkte');
+  svg.addEventListener('click', e => {
+    const r = svg.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    const d = Math.hypot(x - 150, y - 150);
+    const w = d <= 40 ? 10 : d <= 70 ? 9 : d <= 100 ? 8 : d <= 130 ? 7 : 6;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', x);
+    c.setAttribute('cy', y);
+    c.setAttribute('r', 5);
+    c.setAttribute('fill', colors[aktive]);
+    c.setAttribute('class', 'treffer');
+    svg.appendChild(c);
+    serien[aktive].push(w);
+    render();
+  });
+
+  function render() {
+    ul.innerHTML = '';
+    serien[aktive].forEach((val, idx) => {
+      ul.insertAdjacentHTML('beforeend', `<li>${val} Punkte <button onclick="removeTreffer(${idx})">❌</button></li>`);
+    });
+    ges.textContent = `Gesamt: ${serien[aktive].reduce((a, b) => a + b, 0)} Punkte`;
+  }
+
+  window.removeTreffer = (index) => {
+    serien[aktive].splice(index, 1);
+    const kreise = document.querySelectorAll('#scheibe circle.treffer');
+    if (kreise[index]) kreise[index].remove();
+    render();
+  };
+
+  document.getElementById('letztenTrefferLoeschen').addEventListener('click', () => {
+    if (serien[aktive].length > 0) {
+      serien[aktive].pop();
+      const kreise = document.querySelectorAll('#scheibe circle.treffer');
+      if (kreise.length > 0) kreise[kreise.length - 1].remove();
+      render();
+    }
+  });
+
+  document.getElementById('resetSerienBtn').addEventListener('click', () => {
+    for (let i = 0; i < serien.length; i++) serien[i] = [];
+    document.querySelectorAll('#scheibe circle.treffer').forEach(c => c.remove());
+    aktive = 0;
+    document.querySelectorAll('#serieButtons button').forEach((btn, idx) => btn.classList.toggle('activeSerie', idx === 0));
+    render();
+  });
+
+  document.getElementById('ergebnisSpeichern').addEventListener('click', () => {
+    const datum = new Date().toLocaleString();
+    const standort = document.getElementById('standortSelect').value;
+    const waffe = document.getElementById('waffenSelect').selectedOptions[0]?.textContent || '-';
+    const munition = document.getElementById('munitionSelect').selectedOptions[0]?.textContent || '-';
+    // Speichere ALLE Serien + zugehörige SVGs
+    const serienClone = serien.map(arr=>[...arr]);
+    const svgs = [];
+    for(let s=0;s<serien.length;s++) {
+      // Blende alle Kreise außer Farbe dieser Serie aus
+      const svgClone = document.getElementById('scheibe').cloneNode(true);
+      // Entferne alle Kreise anderer Farben
+      Array.from(svgClone.querySelectorAll('circle.treffer')).forEach(circle=>{
+        if(circle.getAttribute('fill')!==colors[s]) circle.remove();
+      });
+      svgs.push(svgClone.outerHTML);
+    }
+    const eintrag = { datum, standort, waffe, munition, serien: serienClone, svgs };
+    ergebnisse.push(eintrag);
+    persistData();
+    updateErgebnisListe();
+  });
+
+  // --- FILTER EVENTS ---
+  document.getElementById('filterStandort').addEventListener('change', updateErgebnisListe);
+  document.getElementById('filterDatum').addEventListener('change', updateErgebnisListe);
+  document.getElementById('filterReset').addEventListener('click', ()=>{
+    document.getElementById('filterStandort').value = "";
+    document.getElementById('filterDatum').value = "";
+    updateErgebnisListe();
+  });
+
+  function updateErgebnisListe() {
+    const container = document.getElementById('ergebnisListe');
+    const standortFilter = document.getElementById('filterStandort')?.value || "";
+    const datumFilter = document.getElementById('filterDatum')?.value || "";
+    container.innerHTML = '';
+    // Gefilterte Einträge bestimmen:
+    let gefilterte = ergebnisse.filter(e => {
+      let match = true;
+      if (standortFilter && e.standort !== standortFilter) match = false;
+      if (datumFilter) {
+        // Robust: "08.06.2025, 16:48:52" => "2025-06-08"
+        const raw = (e.datum || '').split(',')[0].trim(); // "08.06.2025"
+        if(raw && raw.includes('.')) {
+          const [tag, monat, jahr] = raw.split('.');
+          const eintragsDatum = `${jahr}-${monat.padStart(2, '0')}-${tag.padStart(2, '0')}`;
+          if (eintragsDatum !== datumFilter) match = false;
+        } else {
+          match = false;
+        }
+      }
+      return match;
+    });
+    gefilterte.forEach((e, idx) => {
+      let serienOptionen = '';
+      for(let i=0; i<10; i++) {
+        serienOptionen += `<option value="${i}">Serie ${i+1}</option>`;
+      }
+      const uniqueSelectId = `serienSelect_${idx}`;
+      container.innerHTML += `
+        <div style='margin-bottom:20px; padding:10px; border:1px solid #555;'>
+          <strong>${e.datum}</strong><br>
+          Standort: ${e.standort}<br>
+          Waffe: ${e.waffe}<br>
+          Munition: ${e.munition}<br>
+          <label>Serie auswählen: 
+            <select id="${uniqueSelectId}">
+              ${serienOptionen}
+            </select>
+          </label>
+          <div id="serienErgebnis_${idx}"></div>
+        </div>`;
+      setTimeout(()=>{
+        const select = document.getElementById(uniqueSelectId);
+        const anzeigeDiv = document.getElementById(`serienErgebnis_${idx}`);
+        const updateAnzeige = () => {
+          const sidx = +select.value;
+          if(Array.isArray(e.serien) && e.serien[sidx] && e.serien[sidx].length > 0) {
+            const punkte = e.serien[sidx];
+            const summe = punkte.reduce((a,b)=>a+b,0);
+            anzeigeDiv.innerHTML = `
+              <strong>Punkte:</strong> ${punkte.join(', ')}<br>
+              <strong>Gesamt:</strong> ${summe} Punkte<br>
+              ${(Array.isArray(e.svgs) && e.svgs[sidx]) ? e.svgs[sidx] : ''}
+            `;
+          } else {
+            anzeigeDiv.innerHTML = `<em>Keine Treffer in dieser Serie.</em>`;
+          }
+        };
+        select.addEventListener('change', updateAnzeige);
+        updateAnzeige();
+      }, 0);
+    });
+  }
+
+  document.getElementById('munitionArt').addEventListener('change', () => {
+    document.getElementById('ballistik').style.display = document.getElementById('munitionArt').value === 'Langwaffe' ? 'block' : 'none';
+  });
+
+  document.getElementById('waffeSpeichern').addEventListener('click', () => {
+    const H = document.getElementById('hersteller').value.trim(),
+          Mo = document.getElementById('modell').value.trim(),
+          Ka = document.getElementById('kaliber').value.trim(),
+          A = document.getElementById('waffenart').value;
+    if (H && Mo && Ka) {
+      waffen.push({ hersteller: H, modell: Mo, kaliber: Ka, art: A });
+      showWaffen(); updateDropdowns();
+      persistData();
+    }
+  });
+
+  function showWaffen() {
+    document.getElementById('waffenListe').innerHTML = '<h3>Waffen:</h3><ul>' +
+      waffen.map((w, i) => `<li>${w.hersteller} ${w.modell} | ${w.kaliber} (${w.art}) <button onclick="delW(${i})">❌</button></li>`).join('') + '</ul>';
+  }
+  window.delW = i => { waffen.splice(i, 1); showWaffen(); updateDropdowns(); persistData(); };
+
+  document.getElementById('munitionSpeichern').addEventListener('click', () => {
+    const N = document.getElementById('munitionName').value.trim(),
+          Ka = document.getElementById('munitionKaliber').value.trim(),
+          Ge = document.getElementById('munitionGewicht').value.trim(),
+          Ar = document.getElementById('munitionArt').value;
+    if (!N || !Ka || !Ge) return;
+    const obj = { name: N, kaliber: Ka, gewicht: Ge, art: Ar };
+    if (Ar === 'Langwaffe') {
+      ['v0','v100','v200','v300','e0','e100','e200','e300'].forEach(id => obj[id] = document.getElementById(id).value || '-');
+    }
+    munitionen.push(obj);
+    showMunition(); updateDropdowns();
+    persistData();
+  });
+
+  function showMunition() {
+    document.getElementById('munitionListe').innerHTML = '<h3>Munition:</h3><ul>' +
+      munitionen.map((m, i) => {
+        let eintrag = `<li><strong>${m.name}</strong> | ${m.kaliber} | ${m.gewicht}`;
+        if (m.art === 'Langwaffe') {
+          eintrag += `<br><strong>Geschossgeschwindigkeit:</strong> V0 = ${m.v0} m/s | V100 = ${m.v100} m/s | V200 = ${m.v200} m/s | V300 = ${m.v300} m/s`;
+          eintrag += `<br><strong>Geschossenergie:</strong> E0 = ${m.e0} J | E100 = ${m.e100} J | E200 = ${m.e200} J | E300 = ${m.e300} J`;
+        }
+        eintrag += ` <button onclick="delM(${i})">❌</button></li>`;
+        return eintrag;
+      }).join('') + '</ul>';
+  }
+  window.delM = i => { munitionen.splice(i, 1); showMunition(); updateDropdowns(); persistData(); };
+
+  function updateDropdowns() {
+    const wS = document.getElementById('waffenSelect');
+    const mS = document.getElementById('munitionSelect');
+    wS.innerHTML = '<option>Waffe wählen</option>';
+    mS.innerHTML = '<option>Munition wählen</option>';
+    ['Kurzwaffe','Langwaffe'].forEach(type => {
+      const wg = document.createElement('optgroup'); wg.label = type;
+      waffen.filter(w => w.art === type).forEach((w, i) => {
+        const o = document.createElement('option');
+        o.textContent = `${w.hersteller} ${w.modell}`;
+        o.value = `w${i}`; wg.appendChild(o);
+      });
+      const mg = document.createElement('optgroup'); mg.label = type;
+      munitionen.filter(m => m.art === type).forEach((m, i) => {
+        const o = document.createElement('option');
+        o.textContent = m.name;
+        o.value = `m${i}`; mg.appendChild(o);
+      });
+      wS.appendChild(wg); mS.appendChild(mg);
+    });
+  }
+
+  // Initiales Rendering und Dropdowns
+  render();
+  updateDropdowns();
+  updateErgebnisListe();
+});
+</script>
+</body>
+</html>
