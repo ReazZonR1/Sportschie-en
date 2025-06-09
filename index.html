@@ -128,7 +128,7 @@
 </div>
 
 <script>
-  // ========== 1. Firebase Initialisieren ==========
+  // 1. Firebase Initialisieren
   const firebaseConfig = {
     apiKey: "AIzaSyAyuBqsLg9FzkzSzNMjLplJ1NzZw8Ui0d0",
     authDomain: "sportschie-en.firebaseapp.com",
@@ -143,7 +143,7 @@
   let currentUser = null;
   let waffen = [], munitionen = [], ergebnisse = [];
 
-  // ========== 2. Login / Logout ==========
+  // 2. Login / Logout
   const auth = firebase.auth();
 
   document.getElementById('loginBtn').onclick = () => {
@@ -171,7 +171,7 @@
     }
   });
 
-  // ========== 3. Daten-Cloud-Logik ==========
+  // 3. Cloud / LocalStorage Logik
   function cloudRef(path) {
     if(!currentUser) throw "Nicht angemeldet!";
     return firebase.database().ref('/nutzer/' + currentUser.uid + '/' + path);
@@ -211,7 +211,7 @@
     if(currentUser) saveCloudData(); else saveLocalData();
   }
 
-  // ========== App-Logik (wie gehabt, aber mit persistData) ==========
+  // App-Logik
   window.addEventListener('DOMContentLoaded', () => {
     const colors = ['red','blue','green','orange','purple','yellow','cyan','magenta','lime','gray'];
     const serien = Array.from({length: 10}, () => []);
