@@ -267,16 +267,12 @@
 
         // ========== 4. DATA HANDLING (SINGLE SOURCE OF TRUTH) ==========
         
-        /**
-         * Writes the entire local state to Firestore. This is the central function for saving data.
-         */
         async function updateCloudState() {
             if (!currentUser) {
                 console.warn("Update prevented: User not logged in.");
                 return;
             }
             try {
-                // Ensure no undefined values are being sent to Firestore
                 const cleanState = JSON.parse(JSON.stringify(state));
                 await setDoc(doc(db, 'user-data', currentUser.uid), cleanState);
             } catch (error) {
@@ -285,23 +281,16 @@
             }
         }
         
-        /**
-         * Listens for real-time changes in Firestore and updates the local state.
-         * This is the ONLY function that should modify the global `state` object.
-         */
         function listenToCloudData() {
             if (!currentUser) return;
             unsubscribeFromData = onSnapshot(doc(db, 'user-data', currentUser.uid), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // FIX: Defensively ensure all state properties are arrays to prevent iteration errors.
                     state.waffen = Array.isArray(data.waffen) ? data.waffen : [];
                     state.munitionen = Array.isArray(data.munitionen) ? data.munitionen : [];
                     state.ergebnisse = Array.isArray(data.ergebnisse) ? data.ergebnisse : [];
                     state.kaeufe = Array.isArray(data.kaeufe) ? data.kaeufe : [];
                 } else {
-                    // If the user has no document yet, initialize a blank state locally
-                    // and save it to create the document.
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
                     updateCloudState(); 
                 }
@@ -312,17 +301,29 @@
             });
         }
         
-        // --- Local Storage for guests ---
         function saveLocalData() {
             localStorage.setItem('schiessAppV2_data', JSON.stringify(state));
         }
 
         function loadLocalData() {
             const localData = localStorage.getItem('schiessAppV2_data');
-            state = localData ? JSON.parse(localData) : { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
+            let parsedState = {};
+            try {
+                if (localData) {
+                    parsedState = JSON.parse(localData);
+                }
+            } catch (e) {
+                console.error("Error parsing local storage data. Resetting state.", e);
+                parsedState = {};
+            }
+
+            // Defensively set state, ensuring all properties are arrays.
+            state.waffen = Array.isArray(parsedState.waffen) ? parsedState.waffen : [];
+            state.munitionen = Array.isArray(parsedState.munitionen) ? parsedState.munitionen : [];
+            state.ergebnisse = Array.isArray(parsedState.ergebnisse) ? parsedState.ergebnisse : [];
+            state.kaeufe = Array.isArray(parsedState.kaeufe) ? parsedState.kaeufe : [];
         }
         
-        // --- Central UI Update Function ---
         function updateAllViews() {
             showWaffen();
             showMunition();
@@ -569,7 +570,8 @@
             if (art === 'Langwaffe') {
                 ['v0', 'v100', 'v200', 'v300', 'e0', 'e100', 'e200', 'e300'].forEach(id => {
                     const value = document.getElementById(id).value;
-                    munition[id] = value ? parseFloat(value) : null;
+                    const numValue = parseFloat(value);
+                    munition[id] = isNaN(numValue) ? null : numValue;
                 });
             }
             state.munitionen.push(munition);
@@ -657,7 +659,9 @@
             const container = document.getElementById('kaufListe');
             container.innerHTML = '<h3>Kauf-Historie</h3>';
             const ul = document.createElement('ul');
-            const sortedKaeufe = [...state.kaeufe].sort((a, b) => new Date(b.datum) - new Date(a.datum));
+            // FIX: Ensure state.kaeufe is an array before trying to spread it
+            const kaeufeArray = Array.isArray(state.kaeufe) ? state.kaeufe : [];
+            const sortedKaeufe = [...kaeufeArray].sort((a, b) => new Date(b.datum) - new Date(a.datum));
             sortedKaeufe.forEach(kauf => {
                 const munition = state.munitionen.find(m => m.id === kauf.munitionId);
                 const li = document.createElement('li');
