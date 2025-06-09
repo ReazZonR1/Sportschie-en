@@ -71,7 +71,7 @@
     <div class="punktliste">
       <h3>Treffer Punkte (aktive Serie)</h3><ul id="punkte"></ul>
       <div class="gesamt" id="gesamtPunkte">Gesamt: 0 Punkte</div>
-      <button class="action" id="letztenTrefferLoeschen">Letzten Treffer löschen</button>
+      <!-- Button entfernt -->
       <button class="action" id="ergebnisSpeichern">Ergebnis speichern</button>
     </div>
   </div>
@@ -220,14 +220,7 @@ window.addEventListener('DOMContentLoaded', () => {
     render();
   };
 
-  document.getElementById('letztenTrefferLoeschen').addEventListener('click', () => {
-    if (serien[aktive].length > 0) {
-      serien[aktive].pop();
-      const kreise = document.querySelectorAll('#scheibe circle.treffer');
-      if (kreise.length > 0) kreise[kreise.length - 1].remove();
-      render();
-    }
-  });
+  // Entfernt: letztenTrefferLoeschen Button und Event
 
   document.getElementById('resetSerienBtn').addEventListener('click', () => {
     for (let i = 0; i < serien.length; i++) serien[i] = [];
@@ -290,9 +283,12 @@ window.addEventListener('DOMContentLoaded', () => {
       return match;
     });
     gefilterte.forEach((e) => {
+      // NUR Serien mit Treffern anzeigen!
       let serienOptionen = '';
-      for(let i=0; i<10; i++) {
-        serienOptionen += `<option value="${i}">Serie ${i+1}</option>`;
+      for(let i=0; i<e.serien.length; i++) {
+        if(Array.isArray(e.serien[i]) && e.serien[i].length > 0) {
+          serienOptionen += `<option value="${i}">Serie ${i+1}</option>`;
+        }
       }
       const uniqueSelectId = `serienSelect_${e.id}`;
       container.innerHTML += `
@@ -326,7 +322,7 @@ window.addEventListener('DOMContentLoaded', () => {
             anzeigeDiv.innerHTML = `<em>Keine Treffer in dieser Serie.</em>`;
           }
         };
-        select.addEventListener('change', updateAnzeige);
+        if(select) select.addEventListener('change', updateAnzeige);
         updateAnzeige();
       }, 0);
     });
