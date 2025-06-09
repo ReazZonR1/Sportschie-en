@@ -215,7 +215,6 @@
         // ========== 2. GLOBAL STATE & DOM ELEMENTS ==========
         let currentUser = null;
         let unsubscribeFromData = null;
-        let isCloudDataLoaded = false;
         
         let state = {
             waffen: [],
@@ -244,16 +243,13 @@
         logoutBtn.addEventListener('click', () => signOut(auth));
 
         onAuthStateChanged(auth, user => {
-            currentUser = user;
-            updateUiForAuthState();
-            
             if (unsubscribeFromData) {
                 unsubscribeFromData();
                 unsubscribeFromData = null;
             }
-
-            isCloudDataLoaded = false;
-
+            currentUser = user;
+            updateUiForAuthState();
+            
             if (user) {
                 listenToCloudData();
             } else {
@@ -269,31 +265,43 @@
             logoutBtn.classList.toggle('hidden', !loggedIn);
         }
 
-        // ========== 4. DATA HANDLING (FIRESTORE & LOCAL) ==========
+        // ========== 4. DATA HANDLING (SINGLE SOURCE OF TRUTH) ==========
         
-        async function persistData() {
-            if (currentUser) {
-                await saveCloudData();
-            } else {
-                saveLocalData();
+        /**
+         * Writes the entire local state to Firestore. This is the central function for saving data.
+         */
+        async function updateCloudState() {
+            if (!currentUser) {
+                console.warn("Update prevented: User not logged in.");
+                return;
+            }
+            try {
+                await setDoc(doc(db, 'user-data', currentUser.uid), state);
+            } catch (error) {
+                console.error("Error updating cloud state:", error);
+                showAlert("Daten konnten nicht in der Cloud gespeichert werden.");
             }
         }
         
+        /**
+         * Listens for real-time changes in Firestore and updates the local state.
+         * This is the ONLY function that should modify the global `state` object.
+         */
         function listenToCloudData() {
             if (!currentUser) return;
-            const userDocRef = doc(db, 'user-data', currentUser.uid);
-            
-            unsubscribeFromData = onSnapshot(userDocRef, (docSnap) => {
-                isCloudDataLoaded = true; // Data has been received from the cloud
+            unsubscribeFromData = onSnapshot(doc(db, 'user-data', currentUser.uid), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
+                    // Update state with cloud data or initialize empty arrays if fields are missing
                     state.waffen = data.waffen || [];
                     state.munitionen = data.munitionen || [];
                     state.ergebnisse = data.ergebnisse || [];
                     state.kaeufe = data.kaeufe || [];
                 } else {
-                    // Initialize if no document exists
+                    // If the user has no document yet, initialize a blank state locally
+                    // and save it to create the document.
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
+                    updateCloudState(); 
                 }
                 updateAllViews();
             }, (error) => {
@@ -302,20 +310,7 @@
             });
         }
         
-        async function saveCloudData() {
-            if (!currentUser || !isCloudDataLoaded) {
-                console.warn("Save prevented: User not logged in or cloud data not yet loaded.");
-                return;
-            }
-            const userDocRef = doc(db, 'user-data', currentUser.uid);
-            try {
-                await setDoc(userDocRef, state, { merge: true });
-            } catch (error) {
-                console.error("Error saving to cloud:", error);
-                showAlert("Daten konnten nicht in der Cloud gespeichert werden.");
-            }
-        }
-        
+        // --- Local Storage for guests ---
         function saveLocalData() {
             localStorage.setItem('schiessAppV2_data', JSON.stringify(state));
         }
@@ -325,6 +320,7 @@
             state = localData ? JSON.parse(localData) : { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
         }
         
+        // --- Central UI Update Function ---
         function updateAllViews() {
             showWaffen();
             showMunition();
@@ -441,8 +437,7 @@
                 serien: JSON.parse(JSON.stringify(nichtLeereSerien))
             };
             state.ergebnisse.push(eintrag);
-            updateErgebnisListe(); // Optimistic update
-            persistData(); // Sync in background
+            currentUser ? updateCloudState() : saveLocalData();
             showAlert("Ergebnis gespeichert!");
         });
         
@@ -501,12 +496,8 @@
 
         function loescheErgebnis(id) {
             showConfirm("Dieses Ergebnis wirklich endgültig löschen?", () => {
-                const idx = state.ergebnisse.findIndex(e => e.id === id);
-                if (idx !== -1) {
-                    state.ergebnisse.splice(idx, 1);
-                    updateErgebnisListe(); // Optimistic update
-                    persistData(); // Sync in background
-                }
+                state.ergebnisse = state.ergebnisse.filter(e => e.id !== id);
+                currentUser ? updateCloudState() : saveLocalData();
             });
         }
 
@@ -520,9 +511,7 @@
             const art = document.getElementById('waffenart').value;
             if (hersteller && modell && kaliber) {
                 state.waffen.push({ hersteller, modell, kaliber, art });
-                showWaffen(); // Optimistic update
-                updateDropdowns(); // Optimistic update
-                persistData(); // Sync in background
+                currentUser ? updateCloudState() : saveLocalData();
                 document.getElementById('hersteller').value = ''; document.getElementById('modell').value = ''; document.getElementById('kaliber').value = '';
             } else { showAlert("Bitte alle Felder für die Waffe ausfüllen."); }
         });
@@ -539,9 +528,7 @@
                 delBtn.className = 'loeschen-btn';
                 delBtn.onclick = () => {
                     state.waffen.splice(i, 1);
-                    showWaffen(); // Optimistic update
-                    updateDropdowns(); // Optimistic update
-                    persistData(); // Sync in background
+                    currentUser ? updateCloudState() : saveLocalData();
                 };
                 li.appendChild(delBtn);
                 ul.appendChild(li);
@@ -560,9 +547,7 @@
                 ['v0', 'v100', 'v200', 'v300', 'e0', 'e100', 'e200', 'e300'].forEach(id => { munition[id] = document.getElementById(id).value || '-'; });
             }
             state.munitionen.push(munition);
-            showMunition(); // Optimistic update
-            updateDropdowns(); // Optimistic update
-            persistData(); // Sync in background
+            currentUser ? updateCloudState() : saveLocalData();
             document.getElementById('munitionName').value = ''; document.getElementById('munitionKaliber').value = ''; document.getElementById('munitionGewicht').value = '';
         });
 
@@ -582,9 +567,7 @@
                 delBtn.className = 'loeschen-btn';
                 delBtn.onclick = () => {
                     state.munitionen.splice(i, 1);
-                    showMunition(); // Optimistic update
-                    updateDropdowns(); // Optimistic update
-                    persistData(); // Sync in background
+                    currentUser ? updateCloudState() : saveLocalData();
                 };
                 li.appendChild(delBtn);
                 ul.appendChild(li);
@@ -633,8 +616,7 @@
             if (!munitionId || !menge || !preis || !datum) { showAlert("Bitte alle Felder für den Kauf ausfüllen."); return; }
             const kauf = { id: `kauf_${Date.now()}`, munitionId, haendler, menge: parseFloat(menge), preis: parseFloat(preis), datum };
             state.kaeufe.push(kauf);
-            showKaeufe(); // Optimistic update
-            persistData(); // Sync in background
+            currentUser ? updateCloudState() : saveLocalData();
             document.getElementById('kaufMunitionSelect').value = ""; document.getElementById('haendlerInput').value = ""; document.getElementById('mengeInput').value = ""; document.getElementById('preisInput').value = ""; document.getElementById('kaufdatumInput').value = "";
         });
 
@@ -662,12 +644,8 @@
 
         function loescheKauf(kaufId) {
             showConfirm("Diesen Kauf wirklich löschen?", () => {
-                const index = state.kaeufe.findIndex(k => k.id === kaufId);
-                if (index !== -1) {
-                    state.kaeufe.splice(index, 1);
-                    showKaeufe(); // Optimistic update
-                    persistData(); // Sync in background
-                }
+                state.kaeufe = state.kaeufe.filter(k => k.id !== kaufId);
+                currentUser ? updateCloudState() : saveLocalData();
             });
         }
 
