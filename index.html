@@ -294,11 +294,11 @@
             unsubscribeFromData = onSnapshot(doc(db, 'user-data', currentUser.uid), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // Update state with cloud data or initialize empty arrays if fields are missing
-                    state.waffen = data.waffen || [];
-                    state.munitionen = data.munitionen || [];
-                    state.ergebnisse = data.ergebnisse || [];
-                    state.kaeufe = data.kaeufe || [];
+                    // FIX: Defensively ensure all state properties are arrays to prevent iteration errors.
+                    state.waffen = Array.isArray(data.waffen) ? data.waffen : [];
+                    state.munitionen = Array.isArray(data.munitionen) ? data.munitionen : [];
+                    state.ergebnisse = Array.isArray(data.ergebnisse) ? data.ergebnisse : [];
+                    state.kaeufe = Array.isArray(data.kaeufe) ? data.kaeufe : [];
                 } else {
                     // If the user has no document yet, initialize a blank state locally
                     // and save it to create the document.
@@ -479,9 +479,7 @@
                 block.style.cssText = 'margin-bottom:20px; padding:15px; background:#1e1e1e; border-radius: 12px;';
                 const anzeigeDatum = new Date(eintrag.datum).toLocaleString('de-DE');
                 
-                // FIX: Add a check to ensure `eintrag.serien` is an array before mapping.
                 const serienOptionen = Array.isArray(eintrag.serien) ? eintrag.serien.map((s, i) => {
-                    // FIX: Ensure s.treffer exists and is an array before accessing .length
                     const trefferAnzahl = (s && Array.isArray(s.treffer)) ? s.treffer.length : 0;
                     return `<option value="${i}">Serie ${s.serieIndex + 1} (${trefferAnzahl} Schuss)</option>`;
                 }).join('') : '';
