@@ -89,7 +89,13 @@
                 <select id="waffenSelect"><option>Waffe wählen</option></select>
                 <select id="munitionSelect"><option>Munition wählen</option></select>
                 <select id="entfernungSelect"><option>25 m</option><option>50 m</option><option>100 m</option><option>300 m</option></select>
-                <select id="standortSelect"><option>Gondsroth</option><option>Jügesheim</option><option>Mittelbuchen</option><option>Klein-Welzheim</option><option>Arlsfeld</option></select>
+                <select id="standortSelect">
+                    <option value="Gondsroth">Gondsroth</option>
+                    <option value="Jügesheim">Jügesheim</option>
+                    <option value="Mittelbuchen">Mittelbuchen</option>
+                    <option value="Klein-Welzheim">Klein-Welzheim</option>
+                    <option value="Arlsfeld">Arlsfeld</option>
+                </select>
                 <div id="serieButtons"></div>
                 <button class="action" id="resetSerienBtn" style="background-color: #555;">Serien zurücksetzen</button>
             </div>
@@ -142,7 +148,16 @@
             <div class="controls">
                 <h2>Gespeicherte Ergebnisse</h2>
                 <div style="display:flex; flex-direction:column; gap:10px; flex-wrap:wrap; align-items:stretch; margin-bottom:16px;">
-                    <label>Standort filtern<select id="filterStandort"><option value="">Alle Standorte</option><option>Gondsroth</option><option>Jügesheim</option><option>Mittelbuchen</option><option>Klein-Welzheim</option><option>Arlsfeld</option></select></label>
+                    <label>Standort filtern
+                        <select id="filterStandort">
+                            <option value="">Alle Standorte</option>
+                            <option value="Gondsroth">Gondsroth</option>
+                            <option value="Jügesheim">Jügesheim</option>
+                            <option value="Mittelbuchen">Mittelbuchen</option>
+                            <option value="Klein-Welzheim">Klein-Welzheim</option>
+                            <option value="Arlsfeld">Arlsfeld</option>
+                        </select>
+                    </label>
                     <label>Datum filtern<input type="date" id="filterDatum" /></label>
                     <button class="action" id="filterReset" style="height:38px;align-self:center; background-color:#555;">Filter zurücksetzen</button>
                 </div>
@@ -200,7 +215,7 @@
         // ========== 2. GLOBAL STATE & DOM ELEMENTS ==========
         let currentUser = null;
         let unsubscribeFromData = null;
-        let isCloudDataLoaded = false; // SYNC FIX: Flag to prevent overwrites
+        let isCloudDataLoaded = false;
         
         let state = {
             waffen: [],
@@ -237,7 +252,7 @@
                 unsubscribeFromData = null;
             }
 
-            isCloudDataLoaded = false; // SYNC FIX: Reset flag on auth state change
+            isCloudDataLoaded = false;
 
             if (user) {
                 listenToCloudData();
@@ -269,6 +284,7 @@
             const userDocRef = doc(db, 'user-data', currentUser.uid);
             
             unsubscribeFromData = onSnapshot(userDocRef, (docSnap) => {
+                isCloudDataLoaded = true; // Data has been received from the cloud
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     state.waffen = data.waffen || [];
@@ -276,9 +292,9 @@
                     state.ergebnisse = data.ergebnisse || [];
                     state.kaeufe = data.kaeufe || [];
                 } else {
+                    // Initialize if no document exists
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
                 }
-                isCloudDataLoaded = true; // SYNC FIX: Set flag after first successful data load
                 updateAllViews();
             }, (error) => {
                 console.error("Error listening to cloud data:", error);
@@ -287,17 +303,14 @@
         }
         
         async function saveCloudData() {
-            // SYNC FIX: Do not save if user is not logged in OR if the initial data has not been loaded yet.
-            // This prevents an uninitialized client from overwriting cloud data.
             if (!currentUser || !isCloudDataLoaded) {
-                console.log("Save prevented: User not logged in or cloud data not yet loaded.");
+                console.warn("Save prevented: User not logged in or cloud data not yet loaded.");
                 return;
             }
             const userDocRef = doc(db, 'user-data', currentUser.uid);
             try {
                 await setDoc(userDocRef, state, { merge: true });
-            } catch (error)
-                 {
+            } catch (error) {
                 console.error("Error saving to cloud:", error);
                 showAlert("Daten konnten nicht in der Cloud gespeichert werden.");
             }
@@ -367,7 +380,8 @@
             if (dist <= 15 * scale) wert = 10; else if (dist <= 50 * scale) wert = 10; else if (dist <= 100 * scale) wert = 9; else if (dist <= 150 * scale) wert = 8; else if (dist <= 200 * scale) wert = 7;
             const trefferPunkt = { x, y, wert, id: `t${Date.now()}${Math.random()}` };
             const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3); c.setAttribute('fill', colors[aktiveSerieIndex]);
+            c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3);
+            c.setAttribute('fill', colors[aktiveSerieIndex]);
             c.dataset.trefferId = trefferPunkt.id;
             c.classList.add('treffer');
             svg.appendChild(c);
@@ -413,7 +427,7 @@
             });
         });
 
-        document.getElementById('ergebnisSpeichern').addEventListener('click', async () => {
+        document.getElementById('ergebnisSpeichern').addEventListener('click', () => {
             const nichtLeereSerien = serien.filter(s => s.length > 0);
             if (nichtLeereSerien.length === 0) {
                 showAlert("Es gibt keine Treffer zum Speichern."); return;
@@ -427,7 +441,8 @@
                 serien: JSON.parse(JSON.stringify(nichtLeereSerien))
             };
             state.ergebnisse.push(eintrag);
-            await persistData();
+            updateErgebnisListe(); // Optimistic update
+            persistData(); // Sync in background
             showAlert("Ergebnis gespeichert!");
         });
         
@@ -474,7 +489,7 @@
                     if (!serie) { anzeigeDiv.innerHTML = `<em>Keine Treffer.</em>`; return; }
                     const punkteWerte = serie.map(p => p.wert);
                     const summe = punkteWerte.reduce((a, b) => a + b, 0);
-                    let svgTreffer = serie.map(p => `<circle cx="${p.x / (svg.getBoundingClientRect().width / 420)}" cy="${p.y / (svg.getBoundingClientRect().height / 420)}" r="3" fill="cyan" />`).join('');
+                    let svgTreffer = serie.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="cyan" />`).join('');
                     const svgString = `<svg width="150" height="150" viewBox="0 0 420 420" style="background:#121212; border-radius:50%;"><circle cx="210" cy="210" r="200" stroke="white" fill="none"/><circle cx="210" cy="210" r="150" stroke="white" fill="none"/><circle cx="210" cy="210" r="100" stroke="white" fill="none"/><circle cx="210" cy="210" r="50" stroke="white" fill="none"/><circle cx="210" cy="210" r="15" stroke="white" fill="none"/>${svgTreffer}</svg>`;
                     anzeigeDiv.innerHTML = `<strong>Punkte:</strong> ${punkteWerte.join(', ')}<br><strong>Gesamt:</strong> ${summe} Punkte`;
                     svgContainer.innerHTML = svgString;
@@ -485,11 +500,12 @@
         }
 
         function loescheErgebnis(id) {
-            showConfirm("Dieses Ergebnis wirklich endgültig löschen?", async () => {
+            showConfirm("Dieses Ergebnis wirklich endgültig löschen?", () => {
                 const idx = state.ergebnisse.findIndex(e => e.id === id);
                 if (idx !== -1) {
                     state.ergebnisse.splice(idx, 1);
-                    await persistData();
+                    updateErgebnisListe(); // Optimistic update
+                    persistData(); // Sync in background
                 }
             });
         }
@@ -497,14 +513,16 @@
         // --- Verwaltung (Waffen & Munition) ---
         document.getElementById('munitionArt').addEventListener('change', (e) => { document.getElementById('ballistik').classList.toggle('hidden', e.target.value !== 'Langwaffe'); });
         
-        document.getElementById('waffeSpeichern').addEventListener('click', async () => {
+        document.getElementById('waffeSpeichern').addEventListener('click', () => {
             const hersteller = document.getElementById('hersteller').value.trim();
             const modell = document.getElementById('modell').value.trim();
             const kaliber = document.getElementById('kaliber').value.trim();
             const art = document.getElementById('waffenart').value;
             if (hersteller && modell && kaliber) {
                 state.waffen.push({ hersteller, modell, kaliber, art });
-                await persistData();
+                showWaffen(); // Optimistic update
+                updateDropdowns(); // Optimistic update
+                persistData(); // Sync in background
                 document.getElementById('hersteller').value = ''; document.getElementById('modell').value = ''; document.getElementById('kaliber').value = '';
             } else { showAlert("Bitte alle Felder für die Waffe ausfüllen."); }
         });
@@ -519,9 +537,11 @@
                 const delBtn = document.createElement('button');
                 delBtn.textContent = '❌';
                 delBtn.className = 'loeschen-btn';
-                delBtn.onclick = async () => {
+                delBtn.onclick = () => {
                     state.waffen.splice(i, 1);
-                    await persistData();
+                    showWaffen(); // Optimistic update
+                    updateDropdowns(); // Optimistic update
+                    persistData(); // Sync in background
                 };
                 li.appendChild(delBtn);
                 ul.appendChild(li);
@@ -529,7 +549,7 @@
             container.appendChild(ul);
         }
 
-        document.getElementById('munitionSpeichern').addEventListener('click', async () => {
+        document.getElementById('munitionSpeichern').addEventListener('click', () => {
             const name = document.getElementById('munitionName').value.trim();
             const kaliber = document.getElementById('munitionKaliber').value.trim();
             const gewicht = document.getElementById('munitionGewicht').value.trim();
@@ -540,7 +560,9 @@
                 ['v0', 'v100', 'v200', 'v300', 'e0', 'e100', 'e200', 'e300'].forEach(id => { munition[id] = document.getElementById(id).value || '-'; });
             }
             state.munitionen.push(munition);
-            await persistData();
+            showMunition(); // Optimistic update
+            updateDropdowns(); // Optimistic update
+            persistData(); // Sync in background
             document.getElementById('munitionName').value = ''; document.getElementById('munitionKaliber').value = ''; document.getElementById('munitionGewicht').value = '';
         });
 
@@ -558,9 +580,11 @@
                 const delBtn = document.createElement('button');
                 delBtn.textContent = '❌';
                 delBtn.className = 'loeschen-btn';
-                delBtn.onclick = async () => {
+                delBtn.onclick = () => {
                     state.munitionen.splice(i, 1);
-                    await persistData();
+                    showMunition(); // Optimistic update
+                    updateDropdowns(); // Optimistic update
+                    persistData(); // Sync in background
                 };
                 li.appendChild(delBtn);
                 ul.appendChild(li);
@@ -600,7 +624,7 @@
         }
 
         // --- Munitionskäufe Logic ---
-        document.getElementById('kaufSpeichernBtn').addEventListener('click', async () => {
+        document.getElementById('kaufSpeichernBtn').addEventListener('click', () => {
             const munitionId = document.getElementById('kaufMunitionSelect').value;
             const haendler = document.getElementById('haendlerInput').value.trim();
             const menge = document.getElementById('mengeInput').value;
@@ -609,7 +633,8 @@
             if (!munitionId || !menge || !preis || !datum) { showAlert("Bitte alle Felder für den Kauf ausfüllen."); return; }
             const kauf = { id: `kauf_${Date.now()}`, munitionId, haendler, menge: parseFloat(menge), preis: parseFloat(preis), datum };
             state.kaeufe.push(kauf);
-            await persistData();
+            showKaeufe(); // Optimistic update
+            persistData(); // Sync in background
             document.getElementById('kaufMunitionSelect').value = ""; document.getElementById('haendlerInput').value = ""; document.getElementById('mengeInput').value = ""; document.getElementById('preisInput').value = ""; document.getElementById('kaufdatumInput').value = "";
         });
 
@@ -622,7 +647,7 @@
                 const munition = state.munitionen.find(m => m.id === kauf.munitionId);
                 const li = document.createElement('li');
                 const munitionInfo = munition ? `${munition.name} (${munition.kaliber})` : 'Unbekannte Munition';
-                const preisProStueck = (kauf.preis / kauf.menge).toFixed(3);
+                const preisProStueck = kauf.menge > 0 ? (kauf.preis / kauf.menge).toFixed(3) : 0;
                 const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
                 li.innerHTML = `<div style="flex-grow: 1;"><strong>${munitionInfo}</strong><br><small>Menge: ${kauf.menge} Stk. | Preis: ${kauf.preis.toFixed(2)}€ (${preisProStueck}€/Stk.)</small><br><small>Händler: ${kauf.haendler || '-'} | Datum: ${kaufDatum}</small></div>`;
                 const delBtn = document.createElement('button');
@@ -636,11 +661,12 @@
         }
 
         function loescheKauf(kaufId) {
-            showConfirm("Diesen Kauf wirklich löschen?", async () => {
+            showConfirm("Diesen Kauf wirklich löschen?", () => {
                 const index = state.kaeufe.findIndex(k => k.id === kaufId);
                 if (index !== -1) {
                     state.kaeufe.splice(index, 1);
-                    await persistData();
+                    showKaeufe(); // Optimistic update
+                    persistData(); // Sync in background
                 }
             });
         }
