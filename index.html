@@ -18,7 +18,7 @@
         .tab.active { display:block; }
         .zentriert { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 20px; }
         .controls { display:flex; flex-direction:column; gap:15px; max-width:350px; width: 100%; box-sizing: border-box; background: #1e1e1e; padding: 20px; border-radius: 12px;}
-        .punktliste, .liste { margin-top:10px; background:#1e1e1e; border-radius:12px; padding:20px; max-width:350px; width:100%; box-sizing: border-box;}
+        .punktliste, .liste { margin-top:10px; background:#1e1e1e; border-radius:12px; padding:20px; max-width:600px; width:100%; box-sizing: border-box;}
         
         /* Buttons */
         .btn { padding: 10px 18px; background: #333; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: background 0.2s, transform 0.1s; }
@@ -163,9 +163,8 @@
                 <div class="form-group"><label for="kaufdatumInput">Kaufdatum:</label><input id="kaufdatumInput" type="date"></div>
                 <button class="action" id="kaufSpeichernBtn">Kauf speichern</button>
             </div>
-            <div class="liste" id="kaufListe" style="max-width: 600px;">
+            <div class="liste" id="kaufListe">
                 <h3>Kauf-Historie</h3>
-                <!-- Purchase list will be rendered here -->
             </div>
         </div>
     </div>
@@ -180,12 +179,10 @@
 
     <!-- Firebase SDKs -->
     <script type="module">
-        // Import modular Firebase SDKs
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // IMPORTANT: Replace with your actual Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyAyuBqsLg9FzkzSzNMjLplJ1NzZw8Ui0d0",
             authDomain: "sportschie-en.firebaseapp.com",
@@ -203,6 +200,7 @@
         // ========== 2. GLOBAL STATE & DOM ELEMENTS ==========
         let currentUser = null;
         let unsubscribeFromData = null;
+        let isCloudDataLoaded = false; // SYNC FIX: Flag to prevent overwrites
         
         let state = {
             waffen: [],
@@ -223,8 +221,8 @@
         loginBtn.addEventListener('click', () => {
             const provider = new GoogleAuthProvider();
             signInWithPopup(auth, provider).catch(error => {
-                console.error("Anmeldefehler:", error);
-                showAlert(`Anmeldefehler: ${error.message}`);
+                console.error("Login Error:", error);
+                showAlert(`Login Error: ${error.message}`);
             });
         });
 
@@ -238,6 +236,8 @@
                 unsubscribeFromData();
                 unsubscribeFromData = null;
             }
+
+            isCloudDataLoaded = false; // SYNC FIX: Reset flag on auth state change
 
             if (user) {
                 listenToCloudData();
@@ -278,20 +278,27 @@
                 } else {
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
                 }
+                isCloudDataLoaded = true; // SYNC FIX: Set flag after first successful data load
                 updateAllViews();
             }, (error) => {
-                console.error("Fehler beim Abhören der Cloud-Daten:", error);
+                console.error("Error listening to cloud data:", error);
                 showAlert("Fehler bei der Daten-Synchronisierung.");
             });
         }
         
         async function saveCloudData() {
-            if (!currentUser) return;
+            // SYNC FIX: Do not save if user is not logged in OR if the initial data has not been loaded yet.
+            // This prevents an uninitialized client from overwriting cloud data.
+            if (!currentUser || !isCloudDataLoaded) {
+                console.log("Save prevented: User not logged in or cloud data not yet loaded.");
+                return;
+            }
             const userDocRef = doc(db, 'user-data', currentUser.uid);
             try {
                 await setDoc(userDocRef, state, { merge: true });
-            } catch (error) {
-                console.error("Fehler beim Speichern der Cloud-Daten:", error);
+            } catch (error)
+                 {
+                console.error("Error saving to cloud:", error);
                 showAlert("Daten konnten nicht in der Cloud gespeichert werden.");
             }
         }
@@ -322,32 +329,19 @@
             modalMessage.textContent = message;
             modalButtons.innerHTML = `<button class="modal-btn modal-confirm">OK</button>`;
             modal.style.display = 'flex';
-            
-            modal.querySelector('.modal-confirm').onclick = () => {
-                modal.style.display = 'none';
-            };
+            modal.querySelector('.modal-confirm').onclick = () => { modal.style.display = 'none'; };
         }
 
         function showConfirm(message, onConfirm) {
             modalMessage.textContent = message;
-            modalButtons.innerHTML = `
-                <button class="modal-btn modal-cancel">Abbrechen</button>
-                <button class="modal-btn modal-confirm">Bestätigen</button>
-            `;
+            modalButtons.innerHTML = `<button class="modal-btn modal-cancel">Abbrechen</button><button class="modal-btn modal-confirm">Bestätigen</button>`;
             modal.style.display = 'flex';
-
-            modal.querySelector('.modal-confirm').onclick = () => {
-                modal.style.display = 'none';
-                onConfirm();
-            };
-            modal.querySelector('.modal-cancel').onclick = () => {
-                modal.style.display = 'none';
-            };
+            modal.querySelector('.modal-confirm').onclick = () => { modal.style.display = 'none'; onConfirm(); };
+            modal.querySelector('.modal-cancel').onclick = () => { modal.style.display = 'none'; };
         }
 
         // ========== 6. APP LOGIC ==========
         
-        // --- Tab Navigation ---
         document.querySelectorAll('nav button').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelector('nav button.active')?.classList.remove('active');
@@ -359,7 +353,6 @@
         });
 
         // --- Zielscheibe ---
-        // (This section is unchanged)
         const svg = document.getElementById('scheibe');
         const punkteListeUl = document.getElementById('punkte');
         const gesamtPunkteDiv = document.getElementById('gesamtPunkte');
@@ -371,15 +364,10 @@
             const dist = Math.hypot(x - (r.width / 2), y - (r.height / 2));
             const scale = r.width / 420;
             let wert = 6;
-            if (dist <= 15 * scale) wert = 10;
-            else if (dist <= 50 * scale) wert = 10;
-            else if (dist <= 100 * scale) wert = 9;
-            else if (dist <= 150 * scale) wert = 8;
-            else if (dist <= 200 * scale) wert = 7;
-            const trefferPunkt = { x, y, wert, id: `t${Date.now()}` };
+            if (dist <= 15 * scale) wert = 10; else if (dist <= 50 * scale) wert = 10; else if (dist <= 100 * scale) wert = 9; else if (dist <= 150 * scale) wert = 8; else if (dist <= 200 * scale) wert = 7;
+            const trefferPunkt = { x, y, wert, id: `t${Date.now()}${Math.random()}` };
             const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3);
-            c.setAttribute('fill', colors[aktiveSerieIndex]);
+            c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3); c.setAttribute('fill', colors[aktiveSerieIndex]);
             c.dataset.trefferId = trefferPunkt.id;
             c.classList.add('treffer');
             svg.appendChild(c);
@@ -396,7 +384,6 @@
                 const deleteBtn = document.createElement('button');
                 deleteBtn.textContent = '❌';
                 deleteBtn.className = 'loeschen-btn';
-                deleteBtn.style.padding = '2px 8px';
                 deleteBtn.onclick = () => removeTreffer(punkt.id);
                 li.appendChild(deleteBtn);
                 punkteListeUl.appendChild(li);
@@ -404,68 +391,209 @@
             const summe = aktivePunkte.reduce((acc, p) => acc + p.wert, 0);
             gesamtPunkteDiv.textContent = `Gesamt: ${summe} Punkte`;
         }
+
+        function removeTreffer(trefferId) {
+            const indexToRemove = serien[aktiveSerieIndex].findIndex(p => p.id === trefferId);
+            if (indexToRemove !== -1) {
+                serien[aktiveSerieIndex].splice(indexToRemove, 1);
+                svg.querySelector(`circle[data-treffer-id='${trefferId}']`)?.remove();
+                renderAktiveSerie();
+            }
+        }
         
-        // --- Other functions for Zielscheibe, Ergebnisse (unchanged) ---
-        function removeTreffer(trefferId){const indexToRemove=serien[aktiveSerieIndex].findIndex(p=>p.id===trefferId);if(indexToRemove!==-1){serien[aktiveSerieIndex].splice(indexToRemove,1);svg.querySelector(`circle[data-treffer-id='${trefferId}']`)?.remove();renderAktiveSerie()}}
-        document.getElementById('resetSerienBtn').addEventListener('click',()=>{showConfirm("Alle Treffer auf der aktuellen Scheibe zurücksetzen?",()=>{serien=Array.from({length:10},()=>[]);document.querySelectorAll('#scheibe circle.treffer').forEach(c=>c.remove());aktiveSerieIndex=0;const sbContainer=document.getElementById('serieButtons');sbContainer.querySelector('.activeSerie')?.classList.remove('activeSerie');sbContainer.children[0].classList.add('activeSerie');renderAktiveSerie()})});
-        document.getElementById('ergebnisSpeichern').addEventListener('click',async()=>{const nichtLeereSerien=serien.filter(s=>s.length>0);if(nichtLeereSerien.length===0){showAlert("Es gibt keine Treffer zum Speichern.");return}const eintrag={id:`id_${Date.now()}_${Math.random().toString(36).substring(2,9)}`,datum:new Date().toISOString(),standort:document.getElementById('standortSelect').value,waffe:document.getElementById('waffenSelect').selectedOptions[0]?.textContent||'-',munition:document.getElementById('munitionSelect').selectedOptions[0]?.textContent||'-',serien:JSON.parse(JSON.stringify(nichtLeereSerien))};state.ergebnisse.push(eintrag);await persistData();updateErgebnisListe();showAlert("Ergebnis gespeichert!")});
-        document.getElementById('filterStandort').addEventListener('change',updateErgebnisListe);document.getElementById('filterDatum').addEventListener('change',updateErgebnisListe);document.getElementById('filterReset').addEventListener('click',()=>{document.getElementById('filterStandort').value="";document.getElementById('filterDatum').value="";updateErgebnisListe()});
-        function updateErgebnisListe(){const container=document.getElementById('ergebnisListe');const standortFilter=document.getElementById('filterStandort').value;const datumFilter=document.getElementById('filterDatum').value;container.innerHTML='';const gefilterte=state.ergebnisse.filter(e=>{if(standortFilter&&e.standort!==standortFilter)return false;if(datumFilter&&e.datum&&!e.datum.startsWith(datumFilter))return false;return true}).sort((a,b)=>new Date(b.datum)-new Date(a.datum));if(gefilterte.length===0){container.innerHTML='<p style="text-align:center; color:#888;">Keine Ergebnisse für diese Filter gefunden.</p>';return}
-        gefilterte.forEach(eintrag=>{const block=document.createElement('div');block.style.cssText='margin-bottom:20px; padding:15px; background:#1e1e1e; border-radius: 12px;';const anzeigeDatum=new Date(eintrag.datum).toLocaleString('de-DE');let serienOptionen=eintrag.serien.map((serie,i)=>`<option value="${i}">Serie ${i+1} (${serie.length} Schuss)</option>`).join('');block.innerHTML=`<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><strong>${anzeigeDatum}</strong><br><small>Standort: ${eintrag.standort} | Waffe: ${eintrag.waffe}</small></div><button class="loeschen-btn" data-id="${eintrag.id}">Löschen</button></div><div style="margin-top:10px; display:flex; gap:10px; align-items: stretch;"><div style="flex:1;"><label>Serie: <select style="width:100%">${serienOptionen}</select></label><div class="serienErgebnis" style="margin-top:8px;"></div></div><div class="serienSVG" style="flex-shrink:0;"></div></div>`;container.appendChild(block);block.querySelector('.loeschen-btn').onclick=()=>loescheErgebnis(eintrag.id);const select=block.querySelector('select');const anzeigeDiv=block.querySelector('.serienErgebnis');const svgContainer=block.querySelector('.serienSVG');const updateAnzeige=()=>{const sidx=+select.value;const serie=eintrag.serien[sidx];if(!serie){anzeigeDiv.innerHTML=`<em>Keine Treffer.</em>`;return}
-        const punkteWerte=serie.map(p=>p.wert);const summe=punkteWerte.reduce((a,b)=>a+b,0);let svgTreffer=serie.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="cyan" />`).join('');const svgString=`<svg width="150" height="150" viewBox="0 0 420 420" style="background:#121212; border-radius:50%;"><circle cx="210" cy="210" r="200" stroke="white" fill="none"/><circle cx="210" cy="210" r="150" stroke="white" fill="none"/><circle cx="210" cy="210" r="100" stroke="white" fill="none"/><circle cx="210" cy="210" r="50" stroke="white" fill="none"/><circle cx="210" cy="210" r="15" stroke="white" fill="none"/>${svgTreffer}</svg>`;anzeigeDiv.innerHTML=`<strong>Punkte:</strong> ${punkteWerte.join(', ')}<br><strong>Gesamt:</strong> ${summe} Punkte`;svgContainer.innerHTML=svgString};select.addEventListener('change',updateAnzeige);updateAnzeige()})}
-        function loescheErgebnis(id){showConfirm("Dieses Ergebnis wirklich endgültig löschen?",async()=>{const idx=state.ergebnisse.findIndex(e=>e.id===id);if(idx!==-1){state.ergebnisse.splice(idx,1);await persistData()}})}
+        document.getElementById('resetSerienBtn').addEventListener('click', () => {
+            showConfirm("Alle Treffer auf der aktuellen Scheibe zurücksetzen?", () => {
+                serien = Array.from({length: 10}, () => []);
+                document.querySelectorAll('#scheibe circle.treffer').forEach(c => c.remove());
+                aktiveSerieIndex = 0;
+                const sbContainer = document.getElementById('serieButtons');
+                sbContainer.querySelector('.activeSerie')?.classList.remove('activeSerie');
+                sbContainer.children[0].classList.add('activeSerie');
+                renderAktiveSerie();
+            });
+        });
+
+        document.getElementById('ergebnisSpeichern').addEventListener('click', async () => {
+            const nichtLeereSerien = serien.filter(s => s.length > 0);
+            if (nichtLeereSerien.length === 0) {
+                showAlert("Es gibt keine Treffer zum Speichern."); return;
+            }
+            const eintrag = {
+                id: `id_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                datum: new Date().toISOString(),
+                standort: document.getElementById('standortSelect').value,
+                waffe: document.getElementById('waffenSelect').selectedOptions[0]?.textContent || '-',
+                munition: document.getElementById('munitionSelect').selectedOptions[0]?.textContent || '-',
+                serien: JSON.parse(JSON.stringify(nichtLeereSerien))
+            };
+            state.ergebnisse.push(eintrag);
+            await persistData();
+            showAlert("Ergebnis gespeichert!");
+        });
+        
+        // --- Ergebnisse anzeigen & filtern ---
+        document.getElementById('filterStandort').addEventListener('change', updateErgebnisListe);
+        document.getElementById('filterDatum').addEventListener('change', updateErgebnisListe);
+        document.getElementById('filterReset').addEventListener('click', () => {
+            document.getElementById('filterStandort').value = "";
+            document.getElementById('filterDatum').value = "";
+            updateErgebnisListe();
+        });
+
+        function updateErgebnisListe() {
+            const container = document.getElementById('ergebnisListe');
+            const standortFilter = document.getElementById('filterStandort').value;
+            const datumFilter = document.getElementById('filterDatum').value;
+            container.innerHTML = '';
+
+            const gefilterte = state.ergebnisse.filter(e => {
+                if (standortFilter && e.standort !== standortFilter) return false;
+                if (datumFilter && e.datum && !e.datum.startsWith(datumFilter)) return false;
+                return true;
+            }).sort((a, b) => new Date(b.datum) - new Date(a.datum));
+
+            if (gefilterte.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:#888;">Keine Ergebnisse für diese Filter gefunden.</p>';
+                return;
+            }
+
+            gefilterte.forEach(eintrag => {
+                const block = document.createElement('div');
+                block.style.cssText = 'margin-bottom:20px; padding:15px; background:#1e1e1e; border-radius: 12px;';
+                const anzeigeDatum = new Date(eintrag.datum).toLocaleString('de-DE');
+                let serienOptionen = eintrag.serien.map((serie, i) => `<option value="${i}">Serie ${i + 1} (${serie.length} Schuss)</option>`).join('');
+                block.innerHTML = `<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><strong>${anzeigeDatum}</strong><br><small>Standort: ${eintrag.standort} | Waffe: ${eintrag.waffe}</small></div><button class="loeschen-btn" data-id="${eintrag.id}">Löschen</button></div><div style="margin-top:10px; display:flex; gap:10px; align-items: stretch;"><div style="flex:1;"><label>Serie: <select style="width:100%">${serienOptionen}</select></label><div class="serienErgebnis" style="margin-top:8px;"></div></div><div class="serienSVG" style="flex-shrink:0;"></div></div>`;
+                container.appendChild(block);
+                block.querySelector('.loeschen-btn').onclick = () => loescheErgebnis(eintrag.id);
+                const select = block.querySelector('select');
+                const anzeigeDiv = block.querySelector('.serienErgebnis');
+                const svgContainer = block.querySelector('.serienSVG');
+                const updateAnzeige = () => {
+                    const sidx = +select.value;
+                    const serie = eintrag.serien[sidx];
+                    if (!serie) { anzeigeDiv.innerHTML = `<em>Keine Treffer.</em>`; return; }
+                    const punkteWerte = serie.map(p => p.wert);
+                    const summe = punkteWerte.reduce((a, b) => a + b, 0);
+                    let svgTreffer = serie.map(p => `<circle cx="${p.x / (svg.getBoundingClientRect().width / 420)}" cy="${p.y / (svg.getBoundingClientRect().height / 420)}" r="3" fill="cyan" />`).join('');
+                    const svgString = `<svg width="150" height="150" viewBox="0 0 420 420" style="background:#121212; border-radius:50%;"><circle cx="210" cy="210" r="200" stroke="white" fill="none"/><circle cx="210" cy="210" r="150" stroke="white" fill="none"/><circle cx="210" cy="210" r="100" stroke="white" fill="none"/><circle cx="210" cy="210" r="50" stroke="white" fill="none"/><circle cx="210" cy="210" r="15" stroke="white" fill="none"/>${svgTreffer}</svg>`;
+                    anzeigeDiv.innerHTML = `<strong>Punkte:</strong> ${punkteWerte.join(', ')}<br><strong>Gesamt:</strong> ${summe} Punkte`;
+                    svgContainer.innerHTML = svgString;
+                };
+                select.addEventListener('change', updateAnzeige);
+                updateAnzeige();
+            });
+        }
+
+        function loescheErgebnis(id) {
+            showConfirm("Dieses Ergebnis wirklich endgültig löschen?", async () => {
+                const idx = state.ergebnisse.findIndex(e => e.id === id);
+                if (idx !== -1) {
+                    state.ergebnisse.splice(idx, 1);
+                    await persistData();
+                }
+            });
+        }
 
         // --- Verwaltung (Waffen & Munition) ---
-        // (This section is almost unchanged, just added a unique ID to new ammo)
         document.getElementById('munitionArt').addEventListener('change', (e) => { document.getElementById('ballistik').classList.toggle('hidden', e.target.value !== 'Langwaffe'); });
-        document.getElementById('waffeSpeichern').addEventListener('click', async () => { const hersteller = document.getElementById('hersteller').value.trim(); const modell = document.getElementById('modell').value.trim(); const kaliber = document.getElementById('kaliber').value.trim(); const art = document.getElementById('waffenart').value; if (hersteller && modell && kaliber) { state.waffen.push({ hersteller, modell, kaliber, art }); await persistData(); document.getElementById('hersteller').value = ''; document.getElementById('modell').value = ''; document.getElementById('kaliber').value = ''; } else { showAlert("Bitte alle Felder für die Waffe ausfüllen."); } });
-        function showWaffen() { const container = document.getElementById('waffenListe'); container.innerHTML = '<h3>Meine Waffen:</h3>'; const ul = document.createElement('ul'); state.waffen.forEach((w, i) => { const li = document.createElement('li'); li.innerHTML = `<span>${w.hersteller} ${w.modell} | ${w.kaliber} (${w.art})</span>`; const delBtn = document.createElement('button'); delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn'; delBtn.onclick = async () => { state.waffen.splice(i, 1); await persistData(); }; li.appendChild(delBtn); ul.appendChild(li); }); container.appendChild(ul); }
-        document.getElementById('munitionSpeichern').addEventListener('click', async () => { const name = document.getElementById('munitionName').value.trim(); const kaliber = document.getElementById('munitionKaliber').value.trim(); const gewicht = document.getElementById('munitionGewicht').value.trim(); const art = document.getElementById('munitionArt').value; if (!name || !kaliber || !gewicht) { showAlert("Bitte Name, Kaliber und Gewicht ausfüllen."); return; } const munition = { id: `mun_${Date.now()}`, name, kaliber, gewicht, art }; if (art === 'Langwaffe') { ['v0','v100','v200','v300','e0','e100','e200','e300'].forEach(id => { munition[id] = document.getElementById(id).value || '-'; }); } state.munitionen.push(munition); await persistData(); document.getElementById('munitionName').value = ''; document.getElementById('munitionKaliber').value = ''; document.getElementById('munitionGewicht').value = ''; });
-        function showMunition() { const container = document.getElementById('munitionListe'); container.innerHTML = '<h3>Meine Munition:</h3>'; const ul = document.createElement('ul'); state.munitionen.forEach((m, i) => { let details = `<strong>${m.name}</strong> | ${m.kaliber} | ${m.gewicht}`; if (m.art === 'Langwaffe') { details += `<br><small>V(m/s): ${m.v0||'-'}/${m.v100||'-'}/${m.v200||'-'}/${m.v300||'-'} | E(J): ${m.e0||'-'}/${m.e100||'-'}/${m.e200||'-'}/${m.e300||'-'}</small>`; } const li = document.createElement('li'); li.innerHTML = `<div>${details}</div>`; const delBtn = document.createElement('button'); delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn'; delBtn.onclick = async () => { state.munitionen.splice(i, 1); await persistData(); }; li.appendChild(delBtn); ul.appendChild(li); }); container.appendChild(ul); }
         
-        // --- Dropdown Updates ---
+        document.getElementById('waffeSpeichern').addEventListener('click', async () => {
+            const hersteller = document.getElementById('hersteller').value.trim();
+            const modell = document.getElementById('modell').value.trim();
+            const kaliber = document.getElementById('kaliber').value.trim();
+            const art = document.getElementById('waffenart').value;
+            if (hersteller && modell && kaliber) {
+                state.waffen.push({ hersteller, modell, kaliber, art });
+                await persistData();
+                document.getElementById('hersteller').value = ''; document.getElementById('modell').value = ''; document.getElementById('kaliber').value = '';
+            } else { showAlert("Bitte alle Felder für die Waffe ausfüllen."); }
+        });
+
+        function showWaffen() {
+            const container = document.getElementById('waffenListe');
+            container.innerHTML = '<h3>Meine Waffen:</h3>';
+            const ul = document.createElement('ul');
+            state.waffen.forEach((w, i) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${w.hersteller} ${w.modell} | ${w.kaliber} (${w.art})</span>`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = '❌';
+                delBtn.className = 'loeschen-btn';
+                delBtn.onclick = async () => {
+                    state.waffen.splice(i, 1);
+                    await persistData();
+                };
+                li.appendChild(delBtn);
+                ul.appendChild(li);
+            });
+            container.appendChild(ul);
+        }
+
+        document.getElementById('munitionSpeichern').addEventListener('click', async () => {
+            const name = document.getElementById('munitionName').value.trim();
+            const kaliber = document.getElementById('munitionKaliber').value.trim();
+            const gewicht = document.getElementById('munitionGewicht').value.trim();
+            const art = document.getElementById('munitionArt').value;
+            if (!name || !kaliber || !gewicht) { showAlert("Bitte Name, Kaliber und Gewicht ausfüllen."); return; }
+            const munition = { id: `mun_${Date.now()}`, name, kaliber, gewicht, art };
+            if (art === 'Langwaffe') {
+                ['v0', 'v100', 'v200', 'v300', 'e0', 'e100', 'e200', 'e300'].forEach(id => { munition[id] = document.getElementById(id).value || '-'; });
+            }
+            state.munitionen.push(munition);
+            await persistData();
+            document.getElementById('munitionName').value = ''; document.getElementById('munitionKaliber').value = ''; document.getElementById('munitionGewicht').value = '';
+        });
+
+        function showMunition() {
+            const container = document.getElementById('munitionListe');
+            container.innerHTML = '<h3>Meine Munition:</h3>';
+            const ul = document.createElement('ul');
+            state.munitionen.forEach((m, i) => {
+                let details = `<strong>${m.name}</strong> | ${m.kaliber} | ${m.gewicht}gr`;
+                if (m.art === 'Langwaffe') {
+                    details += `<br><small>V(m/s): ${m.v0 || '-'}/${m.v100 || '-'}/${m.v200 || '-'}/${m.v300 || '-'} | E(J): ${m.e0 || '-'}/${m.e100 || '-'}/${m.e200 || '-'}/${m.e300 || '-'}</small>`;
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `<div>${details}</div>`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = '❌';
+                delBtn.className = 'loeschen-btn';
+                delBtn.onclick = async () => {
+                    state.munitionen.splice(i, 1);
+                    await persistData();
+                };
+                li.appendChild(delBtn);
+                ul.appendChild(li);
+            });
+            container.appendChild(ul);
+        }
+        
         function updateDropdowns() {
             const waffenSelect = document.getElementById('waffenSelect');
             const munitionSelect = document.getElementById('munitionSelect');
             const kaufMunitionSelect = document.getElementById('kaufMunitionSelect');
-
-            // Preserve current selections
             const currentWaffe = waffenSelect.value;
             const currentMunition = munitionSelect.value;
             const currentKaufMunition = kaufMunitionSelect.value;
-
-            // Clear dropdowns
             waffenSelect.innerHTML = '<option value="">Waffe wählen</option>';
             munitionSelect.innerHTML = '<option value="">Munition wählen</option>';
             kaufMunitionSelect.innerHTML = '<option value="">Munition wählen</option>';
-
-            // Populate Waffen and Munition for Tab 1 (Zielscheibe)
             ['Kurzwaffe', 'Langwaffe'].forEach(type => {
                 const waffenOptgroup = document.createElement('optgroup');
                 waffenOptgroup.label = type;
-                state.waffen.filter(w => w.art === type).forEach((w) => {
-                    waffenOptgroup.innerHTML += `<option value="${w.hersteller}-${w.modell}">${w.hersteller} ${w.modell}</option>`;
-                });
+                state.waffen.filter(w => w.art === type).forEach((w) => { waffenOptgroup.innerHTML += `<option value="${w.hersteller}-${w.modell}">${w.hersteller} ${w.modell}</option>`; });
                 waffenSelect.appendChild(waffenOptgroup);
-
                 const munitionOptgroup = document.createElement('optgroup');
                 munitionOptgroup.label = type;
-                state.munitionen.filter(m => m.art === type).forEach(m => {
-                    munitionOptgroup.innerHTML += `<option value="${m.name}">${m.name}</option>`;
-                });
+                state.munitionen.filter(m => m.art === type).forEach(m => { munitionOptgroup.innerHTML += `<option value="${m.name}">${m.name}</option>`; });
                 munitionSelect.appendChild(munitionOptgroup);
             });
-
-            // Populate Munition for Tab 4 (Käufe)
             state.munitionen.forEach(m => {
                 const option = document.createElement('option');
                 option.value = m.id;
                 option.textContent = `${m.name} (${m.kaliber})`;
                 kaufMunitionSelect.appendChild(option);
             });
-
-
-            // Restore selections
             waffenSelect.value = currentWaffe;
             munitionSelect.value = currentMunition;
             kaufMunitionSelect.value = currentKaufMunition;
@@ -478,55 +606,25 @@
             const menge = document.getElementById('mengeInput').value;
             const preis = document.getElementById('preisInput').value;
             const datum = document.getElementById('kaufdatumInput').value;
-
-            if (!munitionId || !menge || !preis || !datum) {
-                showAlert("Bitte alle Felder für den Kauf ausfüllen.");
-                return;
-            }
-
-            const kauf = {
-                id: `kauf_${Date.now()}`,
-                munitionId,
-                haendler,
-                menge: parseFloat(menge),
-                preis: parseFloat(preis),
-                datum
-            };
-
+            if (!munitionId || !menge || !preis || !datum) { showAlert("Bitte alle Felder für den Kauf ausfüllen."); return; }
+            const kauf = { id: `kauf_${Date.now()}`, munitionId, haendler, menge: parseFloat(menge), preis: parseFloat(preis), datum };
             state.kaeufe.push(kauf);
             await persistData();
-
-            // Clear form
-            document.getElementById('kaufMunitionSelect').value = "";
-            document.getElementById('haendlerInput').value = "";
-            document.getElementById('mengeInput').value = "";
-            document.getElementById('preisInput').value = "";
-            document.getElementById('kaufdatumInput').value = "";
+            document.getElementById('kaufMunitionSelect').value = ""; document.getElementById('haendlerInput').value = ""; document.getElementById('mengeInput').value = ""; document.getElementById('preisInput').value = ""; document.getElementById('kaufdatumInput').value = "";
         });
 
         function showKaeufe() {
             const container = document.getElementById('kaufListe');
             container.innerHTML = '<h3>Kauf-Historie</h3>';
             const ul = document.createElement('ul');
-            
-            const sortedKaeufe = [...state.kaeufe].sort((a,b) => new Date(b.datum) - new Date(a.datum));
-
+            const sortedKaeufe = [...state.kaeufe].sort((a, b) => new Date(b.datum) - new Date(a.datum));
             sortedKaeufe.forEach(kauf => {
                 const munition = state.munitionen.find(m => m.id === kauf.munitionId);
                 const li = document.createElement('li');
-
                 const munitionInfo = munition ? `${munition.name} (${munition.kaliber})` : 'Unbekannte Munition';
                 const preisProStueck = (kauf.preis / kauf.menge).toFixed(3);
-                const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE');
-
-                li.innerHTML = `
-                    <div style="flex-grow: 1;">
-                        <strong>${munitionInfo}</strong><br>
-                        <small>Menge: ${kauf.menge} Stk. | Preis: ${kauf.preis.toFixed(2)}€ (${preisProStueck}€/Stk.)</small><br>
-                        <small>Händler: ${kauf.haendler || '-'} | Datum: ${kaufDatum}</small>
-                    </div>
-                `;
-
+                const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
+                li.innerHTML = `<div style="flex-grow: 1;"><strong>${munitionInfo}</strong><br><small>Menge: ${kauf.menge} Stk. | Preis: ${kauf.preis.toFixed(2)}€ (${preisProStueck}€/Stk.)</small><br><small>Händler: ${kauf.haendler || '-'} | Datum: ${kaufDatum}</small></div>`;
                 const delBtn = document.createElement('button');
                 delBtn.textContent = '❌';
                 delBtn.className = 'loeschen-btn';
