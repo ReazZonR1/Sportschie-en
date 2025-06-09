@@ -426,18 +426,23 @@
         });
 
         document.getElementById('ergebnisSpeichern').addEventListener('click', () => {
-            const nichtLeereSerien = serien.filter(s => s.length > 0);
+            const nichtLeereSerien = serien
+                .map((treffer, index) => ({ serieIndex: index, treffer: treffer }))
+                .filter(s => s.treffer.length > 0);
+
             if (nichtLeereSerien.length === 0) {
                 showAlert("Es gibt keine Treffer zum Speichern."); return;
             }
+            
             const eintrag = {
                 id: `id_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
                 datum: new Date().toISOString(),
                 standort: document.getElementById('standortSelect').value,
                 waffe: document.getElementById('waffenSelect').selectedOptions[0]?.textContent || '-',
                 munition: document.getElementById('munitionSelect').selectedOptions[0]?.textContent || '-',
-                serien: JSON.parse(JSON.stringify(nichtLeereSerien))
+                serien: JSON.parse(JSON.stringify(nichtLeereSerien)) // Deep clone
             };
+
             state.ergebnisse.push(eintrag);
             currentUser ? updateCloudState() : saveLocalData();
             showAlert("Ergebnis gespeichert!");
@@ -473,7 +478,8 @@
                 const block = document.createElement('div');
                 block.style.cssText = 'margin-bottom:20px; padding:15px; background:#1e1e1e; border-radius: 12px;';
                 const anzeigeDatum = new Date(eintrag.datum).toLocaleString('de-DE');
-                let serienOptionen = eintrag.serien.map((serie, i) => `<option value="${i}">Serie ${i + 1} (${serie.length} Schuss)</option>`).join('');
+                // FIX: Map over the new object structure for the dropdown
+                let serienOptionen = eintrag.serien.map((s, i) => `<option value="${i}">Serie ${s.serieIndex + 1} (${s.treffer.length} Schuss)</option>`).join('');
                 block.innerHTML = `<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><strong>${anzeigeDatum}</strong><br><small>Standort: ${eintrag.standort} | Waffe: ${eintrag.waffe}</small></div><button class="loeschen-btn" data-id="${eintrag.id}">Löschen</button></div><div style="margin-top:10px; display:flex; gap:10px; align-items: stretch;"><div style="flex:1;"><label>Serie: <select style="width:100%">${serienOptionen}</select></label><div class="serienErgebnis" style="margin-top:8px;"></div></div><div class="serienSVG" style="flex-shrink:0;"></div></div>`;
                 container.appendChild(block);
                 block.querySelector('.loeschen-btn').onclick = () => loescheErgebnis(eintrag.id);
@@ -482,11 +488,13 @@
                 const svgContainer = block.querySelector('.serienSVG');
                 const updateAnzeige = () => {
                     const sidx = +select.value;
-                    const serie = eintrag.serien[sidx];
-                    if (!serie) { anzeigeDiv.innerHTML = `<em>Keine Treffer.</em>`; return; }
-                    const punkteWerte = serie.map(p => p.wert);
+                    const gewaehlteSerie = eintrag.serien[sidx];
+                    if (!gewaehlteSerie) { anzeigeDiv.innerHTML = `<em>Keine Treffer.</em>`; return; }
+                    
+                    const trefferListe = gewaehlteSerie.treffer; // Get the array of hits
+                    const punkteWerte = trefferListe.map(p => p.wert);
                     const summe = punkteWerte.reduce((a, b) => a + b, 0);
-                    let svgTreffer = serie.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="cyan" />`).join('');
+                    let svgTreffer = trefferListe.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="cyan" />`).join('');
                     const svgString = `<svg width="150" height="150" viewBox="0 0 420 420" style="background:#121212; border-radius:50%;"><circle cx="210" cy="210" r="200" stroke="white" fill="none"/><circle cx="210" cy="210" r="150" stroke="white" fill="none"/><circle cx="210" cy="210" r="100" stroke="white" fill="none"/><circle cx="210" cy="210" r="50" stroke="white" fill="none"/><circle cx="210" cy="210" r="15" stroke="white" fill="none"/>${svgTreffer}</svg>`;
                     anzeigeDiv.innerHTML = `<strong>Punkte:</strong> ${punkteWerte.join(', ')}<br><strong>Gesamt:</strong> ${summe} Punkte`;
                     svgContainer.innerHTML = svgString;
@@ -548,7 +556,7 @@
             if (art === 'Langwaffe') {
                 ['v0', 'v100', 'v200', 'v300', 'e0', 'e100', 'e200', 'e300'].forEach(id => {
                     const value = document.getElementById(id).value;
-                    munition[id] = value ? parseFloat(value) : null; // FIX: Store number or null
+                    munition[id] = value ? parseFloat(value) : null;
                 });
             }
             state.munitionen.push(munition);
@@ -563,7 +571,6 @@
             state.munitionen.forEach((m, i) => {
                 let details = `<strong>${m.name}</strong> | ${m.kaliber} | ${m.gewicht}gr`;
                 if (m.art === 'Langwaffe') {
-                    // FIX: Use nullish coalescing operator (??) to handle null values for display
                     details += `<br><small>V(m/s): ${m.v0 ?? '-'}/${m.v100 ?? '-'}/${m.v200 ?? '-'}/${m.v300 ?? '-'} | E(J): ${m.e0 ?? '-'}/${m.e100 ?? '-'}/${m.e200 ?? '-'}/${m.e300 ?? '-'}</small>`;
                 }
                 const li = document.createElement('li');
@@ -624,8 +631,8 @@
                 id: `kauf_${Date.now()}`, 
                 munitionId, 
                 haendler, 
-                menge: parseFloat(menge) || 0, // FIX: Prevent NaN
-                preis: parseFloat(preis) || 0, // FIX: Prevent NaN
+                menge: parseFloat(menge) || 0,
+                preis: parseFloat(preis) || 0,
                 datum 
             };
             state.kaeufe.push(kauf);
@@ -642,7 +649,7 @@
                 const munition = state.munitionen.find(m => m.id === kauf.munitionId);
                 const li = document.createElement('li');
                 const munitionInfo = munition ? `${munition.name} (${munition.kaliber})` : 'Unbekannte Munition';
-                const preisProStueck = kauf.menge > 0 ? (kauf.preis / kauf.menge).toFixed(3) : 0;
+                const preisProStueck = kauf.menge > 0 ? (kauf.preis / kauf.menge).toFixed(3) : "0.000";
                 const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
                 li.innerHTML = `<div style="flex-grow: 1;"><strong>${munitionInfo}</strong><br><small>Menge: ${kauf.menge} Stk. | Preis: ${kauf.preis.toFixed(2)}€ (${preisProStueck}€/Stk.)</small><br><small>Händler: ${kauf.haendler || '-'} | Datum: ${kaufDatum}</small></div>`;
                 const delBtn = document.createElement('button');
