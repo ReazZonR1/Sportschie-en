@@ -478,8 +478,14 @@
                 const block = document.createElement('div');
                 block.style.cssText = 'margin-bottom:20px; padding:15px; background:#1e1e1e; border-radius: 12px;';
                 const anzeigeDatum = new Date(eintrag.datum).toLocaleString('de-DE');
-                // FIX: Map over the new object structure for the dropdown
-                let serienOptionen = eintrag.serien.map((s, i) => `<option value="${i}">Serie ${s.serieIndex + 1} (${s.treffer.length} Schuss)</option>`).join('');
+                
+                // FIX: Add a check to ensure `eintrag.serien` is an array before mapping.
+                const serienOptionen = Array.isArray(eintrag.serien) ? eintrag.serien.map((s, i) => {
+                    // FIX: Ensure s.treffer exists and is an array before accessing .length
+                    const trefferAnzahl = (s && Array.isArray(s.treffer)) ? s.treffer.length : 0;
+                    return `<option value="${i}">Serie ${s.serieIndex + 1} (${trefferAnzahl} Schuss)</option>`;
+                }).join('') : '';
+
                 block.innerHTML = `<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><strong>${anzeigeDatum}</strong><br><small>Standort: ${eintrag.standort} | Waffe: ${eintrag.waffe}</small></div><button class="loeschen-btn" data-id="${eintrag.id}">Löschen</button></div><div style="margin-top:10px; display:flex; gap:10px; align-items: stretch;"><div style="flex:1;"><label>Serie: <select style="width:100%">${serienOptionen}</select></label><div class="serienErgebnis" style="margin-top:8px;"></div></div><div class="serienSVG" style="flex-shrink:0;"></div></div>`;
                 container.appendChild(block);
                 block.querySelector('.loeschen-btn').onclick = () => loescheErgebnis(eintrag.id);
@@ -487,11 +493,18 @@
                 const anzeigeDiv = block.querySelector('.serienErgebnis');
                 const svgContainer = block.querySelector('.serienSVG');
                 const updateAnzeige = () => {
+                    if (!Array.isArray(eintrag.serien) || eintrag.serien.length === 0) {
+                        anzeigeDiv.innerHTML = `<em>Keine Seriendaten verfügbar.</em>`;
+                        return;
+                    }
                     const sidx = +select.value;
                     const gewaehlteSerie = eintrag.serien[sidx];
-                    if (!gewaehlteSerie) { anzeigeDiv.innerHTML = `<em>Keine Treffer.</em>`; return; }
+                    if (!gewaehlteSerie || !Array.isArray(gewaehlteSerie.treffer)) { 
+                        anzeigeDiv.innerHTML = `<em>Keine Treffer in dieser Serie.</em>`; 
+                        return; 
+                    }
                     
-                    const trefferListe = gewaehlteSerie.treffer; // Get the array of hits
+                    const trefferListe = gewaehlteSerie.treffer;
                     const punkteWerte = trefferListe.map(p => p.wert);
                     const summe = punkteWerte.reduce((a, b) => a + b, 0);
                     let svgTreffer = trefferListe.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="cyan" />`).join('');
@@ -500,7 +513,9 @@
                     svgContainer.innerHTML = svgString;
                 };
                 select.addEventListener('change', updateAnzeige);
-                updateAnzeige();
+                if (eintrag.serien && eintrag.serien.length > 0) {
+                    updateAnzeige();
+                }
             });
         }
 
