@@ -728,10 +728,12 @@
                     if (!summaryByCaliber[kaliber]) {
                         summaryByCaliber[kaliber] = {
                             totalMenge: 0,
+                            totalPreis: 0,
                             kaeufe: []
                         };
                     }
                     summaryByCaliber[kaliber].totalMenge += kauf.menge;
+                    summaryByCaliber[kaliber].totalPreis += kauf.preis;
                     summaryByCaliber[kaliber].kaeufe.push(kauf);
                 }
             });
@@ -740,10 +742,11 @@
             // Create an expandable list item for each caliber
             for (const kaliber in summaryByCaliber) {
                 const summaryData = summaryByCaliber[kaliber];
-                
+                const avgPreis = summaryData.totalMenge > 0 ? (summaryData.totalPreis / summaryData.totalMenge).toFixed(3) : "0.000";
+
                 const li = document.createElement('li');
                 li.classList.add('summary-item');
-                li.innerHTML = `<span><strong>${kaliber}:</strong> ${summaryData.totalMenge.toLocaleString('de-DE')} Schuss</span>`;
+                li.innerHTML = `<span><strong>${kaliber}:</strong> ${summaryData.totalMenge.toLocaleString('de-DE')} Schuss | ${summaryData.totalPreis.toFixed(2).replace('.',',')}€ (${avgPreis.replace('.',',')}€/Stk.)</span>`;
                 
                 const detailsUl = document.createElement('ul');
                 detailsUl.classList.add('details-list', 'hidden');
@@ -770,7 +773,9 @@
                 });
 
                 // Add click event to toggle visibility of the details list
-                li.addEventListener('click', () => {
+                li.addEventListener('click', (e) => {
+                    // Stop the event from bubbling up to parent elements
+                    e.stopPropagation(); 
                     detailsUl.classList.toggle('hidden');
                 });
 
