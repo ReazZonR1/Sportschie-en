@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schieß-App mit Serien & Verwaltung – Realtime DB</title>
-    <!-- FIX: Add a dummy favicon to prevent 404 errors in the console -->
+    <!-- Dummy-Favicon, um 404-Fehler in der Konsole zu vermeiden -->
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>
-        /* General Styles */
+        /* Allgemeine Stile */
         body { background: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; }
         h1, h2, h3 { color: #f1f1f1; font-weight: 600; }
         
-        /* Layout & Containers */
+        /* Layout & Container */
         #topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; flex-wrap: wrap; gap: 10px; }
         #userSection { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         #userInfo { font-size: 1em; }
@@ -34,7 +34,7 @@
         nav button:hover { color: white; }
         nav button.active { color:white; border-bottom:3px solid #d32f2f; }
         
-        /* Form Elements */
+        /* Formularelemente */
         select, input[type="text"], input[type="number"], input[type="date"] { width:100%; padding:10px; font-size:1em; box-sizing:border-box; background: #333; color: white; border: 1px solid #555; border-radius: 8px; }
         label { display: block; margin-bottom: 5px; font-size: 0.9em; color: #ccc; }
         .form-group { margin-bottom:15px; }
@@ -48,7 +48,28 @@
         ul { padding-left: 0; list-style-type: none; }
         ul li { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; background: #333; padding: 8px; border-radius: 6px;}
         
-        /* Modal Styles */
+        /* Stile für aufklappbare Zusammenfassung */
+        #kaufZusammenfassung .summary-item {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #kaufZusammenfassung .summary-item:hover {
+            background-color: #444;
+        }
+        #kaufZusammenfassung .details-list {
+            width: 100%;
+            padding-left: 20px;
+            margin-top: 10px;
+            box-sizing: border-box;
+        }
+         #kaufZusammenfassung .details-list li {
+            background-color: #2a2a2a;
+            font-size: 0.9em;
+            border-left: 2px solid #555;
+            padding-left: 10px;
+         }
+        
+        /* Modal-Stile */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: #1e1e1e; padding: 25px; border-radius: 12px; text-align: center; max-width: 350px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         .modal-message { margin-bottom: 20px; font-size: 1.1em; line-height: 1.5; }
@@ -66,7 +87,7 @@
     </style>
 </head>
 <body>
-    <!-- Top Bar for Auth -->
+    <!-- Top-Leiste für Authentifizierung -->
     <div id="topbar">
         <div id="userSection">
             <div id="userInfo">Initialisiere...</div>
@@ -83,7 +104,7 @@
         <button id="tab4Btn">📦 Munitionskäufe</button>
     </nav>
 
-    <!-- Tabs Content -->
+    <!-- Tab-Inhalte -->
     <div id="tab1" class="tab active">
         <div class="zentriert">
             <div class="controls">
@@ -172,7 +193,6 @@
                 <div class="form-group"><label for="kaufdatumInput">Kaufdatum:</label><input id="kaufdatumInput" type="date"></div>
                 <button class="action" id="kaufSpeichernBtn">Kauf speichern</button>
             </div>
-            <!-- CHANGE: Order of history and summary swapped -->
             <div class="liste" id="kaufListe">
                 <h3>Kauf-Historie</h3>
             </div>
@@ -192,11 +212,12 @@
 
     <!-- Firebase SDKs -->
     <script type="module">
+        // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
-        // Firebase config
+        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAyuBqsLg9FzkzSzNMjLplJ1NzZw8Ui0d0",
             authDomain: "sportschie-en.firebaseapp.com",
@@ -223,6 +244,7 @@
             kaeufe: [],
         };
         
+        // Configuration for location-based options
         const standortConfig = {
             Gondsroth: {
                 entfernungen: ["25 m", "50 m"],
@@ -377,7 +399,7 @@
             });
         });
 
-        // --- Zielscheibe ---
+        // --- Target Tab Logic ---
         const svg = document.getElementById('scheibe');
         const punkteListeUl = document.getElementById('punkte');
         const gesamtPunkteDiv = document.getElementById('gesamtPunkte');
@@ -463,6 +485,7 @@
             showAlert("Ergebnis gespeichert!");
         });
         
+        // --- Results Tab Logic ---
         document.getElementById('filterStandort').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterDatum').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterReset').addEventListener('click', () => {
@@ -527,6 +550,7 @@
             });
         }
 
+        // --- Management Tab Logic (Weapons & Ammo) ---
         document.getElementById('munitionArt').addEventListener('change', (e) => { document.getElementById('ballistik').classList.toggle('hidden', e.target.value !== 'Langwaffe'); });
         
         document.getElementById('waffeSpeichern').addEventListener('click', () => {
@@ -592,6 +616,7 @@
             container.appendChild(ul);
         }
         
+        // --- Dropdown Update Logic ---
         function updateWaffenDropdown(allowedWaffenArten) {
             const waffenSelect = document.getElementById('waffenSelect');
             const currentWaffe = waffenSelect.value;
@@ -637,7 +662,7 @@
              kaufMunitionSelect.value = currentKaufMunition;
         }
 
-
+        // --- Purchase Tab Logic ---
         document.getElementById('kaufSpeichernBtn').addEventListener('click', () => {
             const munitionId = document.getElementById('kaufMunitionSelect').value;
             const haendler = document.getElementById('haendlerInput').value.trim();
@@ -679,7 +704,6 @@
             });
         }
         
-        // summary logic ---
         function updateKaufZusammenfassung() {
             const container = document.getElementById('kaufZusammenfassung');
             container.innerHTML = '<h3>Zusammenfassung</h3>';
@@ -692,6 +716,7 @@
                 return;
             }
 
+            // Group purchases by caliber
             const summaryByCaliber = {};
             let totalCost = 0;
 
@@ -701,21 +726,60 @@
                 if (munition && munition.kaliber) {
                     const kaliber = munition.kaliber;
                     if (!summaryByCaliber[kaliber]) {
-                        summaryByCaliber[kaliber] = 0;
+                        summaryByCaliber[kaliber] = {
+                            totalMenge: 0,
+                            kaeufe: []
+                        };
                     }
-                    summaryByCaliber[kaliber] += kauf.menge;
+                    summaryByCaliber[kaliber].totalMenge += kauf.menge;
+                    summaryByCaliber[kaliber].kaeufe.push(kauf);
                 }
             });
 
             const ul = document.createElement('ul');
+            // Create an expandable list item for each caliber
             for (const kaliber in summaryByCaliber) {
-                const menge = summaryByCaliber[kaliber];
+                const summaryData = summaryByCaliber[kaliber];
+                
                 const li = document.createElement('li');
-                li.innerHTML = `<span><strong>${kaliber}:</strong> ${menge.toLocaleString('de-DE')} Schuss</span>`;
+                li.classList.add('summary-item');
+                li.innerHTML = `<span><strong>${kaliber}:</strong> ${summaryData.totalMenge.toLocaleString('de-DE')} Schuss</span>`;
+                
+                const detailsUl = document.createElement('ul');
+                detailsUl.classList.add('details-list', 'hidden');
+
+                // Sort purchases within the caliber group by date
+                summaryData.kaeufe.sort((a, b) => new Date(b.datum) - new Date(a.datum));
+
+                // Create list items for each individual purchase
+                summaryData.kaeufe.forEach(kauf => {
+                    const detailLi = document.createElement('li');
+                    const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
+                    const preisProStueck = kauf.menge > 0 ? (kauf.preis / kauf.menge).toFixed(3) : "0.000";
+                    const munition = munitionArray.find(m => m.id === kauf.munitionId);
+                    const munitionName = munition ? munition.name : '';
+
+                    detailLi.innerHTML = `
+                        <div style="flex-grow: 1;">
+                            <strong>${munitionName}</strong><br>
+                            <small>Menge: ${kauf.menge} Stk. | Preis: ${kauf.preis.toFixed(2)}€ (${preisProStueck}€/Stk.)</small><br>
+                            <small>Händler: ${kauf.haendler || '-'} | Datum: ${kaufDatum}</small>
+                        </div>
+                    `;
+                    detailsUl.appendChild(detailLi);
+                });
+
+                // Add click event to toggle visibility of the details list
+                li.addEventListener('click', () => {
+                    detailsUl.classList.toggle('hidden');
+                });
+
+                li.appendChild(detailsUl);
                 ul.appendChild(li);
             }
             container.appendChild(ul);
 
+            // Display total cost at the end
             const totalDiv = document.createElement('div');
             totalDiv.className = 'gesamt';
             totalDiv.style.marginTop = '15px';
@@ -723,7 +787,8 @@
             totalDiv.textContent = `Gesamtausgaben: ${totalCost.toFixed(2).replace('.', ',')}€`;
             container.appendChild(totalDiv);
         }
-
+        
+        // --- Event Listeners for dependent dropdowns ---
         function updateLocationBasedOptions(resetSelections = false) {
             const standortSelect = document.getElementById('standortSelect');
             const entfernungSelect = document.getElementById('entfernungSelect');
@@ -774,6 +839,7 @@
             munitionSelect.value = "";
         });
 
+        // --- Initial Setup ---
         const serieButtonsContainer = document.getElementById('serieButtons');
         for (let i = 0; i < 10; i++) {
             const b = document.createElement('button');
@@ -788,6 +854,7 @@
             serieButtonsContainer.appendChild(b);
         }
 
+        // Call once on initial load to populate dropdowns correctly
         updateLocationBasedOptions(true);
 
     </script>
