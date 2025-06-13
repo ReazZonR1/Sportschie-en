@@ -494,7 +494,6 @@
                 const anzeigeDatum = new Date(eintrag.datum).toLocaleString('de-DE');
                 const serienOptionen = Array.isArray(eintrag.serien) ? eintrag.serien.map((s, i) => `<option value="${i}">Serie ${s.serieIndex + 1} (${s.treffer.length} Schuss)</option>`).join('') : '';
 
-                // --- CHANGE: Added munition to the display ---
                 block.innerHTML = `<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><strong>${anzeigeDatum}</strong><br><small>Standort: ${eintrag.standort} | Waffe: ${eintrag.waffe} | Munition: ${eintrag.munition || '-'}</small></div><button class="loeschen-btn" data-id="${eintrag.id}">Löschen</button></div><div style="margin-top:10px; display:flex; gap:10px; align-items: stretch;"><div style="flex:1;"><label>Serie: <select style="width:100%" aria-label="Ergebnis Serie auswählen">${serienOptionen}</select></label><div class="serienErgebnis" style="margin-top:8px;"></div></div><div class="serienSVG" style="flex-shrink:0;"></div></div>`;
                 
                 container.appendChild(block);
@@ -592,46 +591,52 @@
             container.appendChild(ul);
         }
         
-        function updateDropdowns(allowedWaffenArten = ['Kurzwaffe', 'Langwaffe']) {
+        // --- NEW: Split dropdown updates into separate functions for better control ---
+        function updateWaffenDropdown(allowedWaffenArten) {
             const waffenSelect = document.getElementById('waffenSelect');
-            const munitionSelect = document.getElementById('munitionSelect');
-            const kaufMunitionSelect = document.getElementById('kaufMunitionSelect');
-            
             const currentWaffe = waffenSelect.value;
-            const currentMunition = munitionSelect.value;
-            const currentKaufMunition = kaufMunitionSelect.value;
-
             waffenSelect.innerHTML = '<option value="">Waffe wählen</option>';
-            munitionSelect.innerHTML = '<option value="">Munition wählen</option>';
-            kaufMunitionSelect.innerHTML = '<option value="">Munition wählen</option>';
-            
-            const waffenArray = state.waffen || [];
-            const munitionArray = state.munitionen || [];
 
+            const waffenArray = state.waffen || [];
             allowedWaffenArten.forEach(type => {
                 const waffenOfType = waffenArray.filter(w => w.art === type);
                 if (waffenOfType.length > 0) {
-                    const waffenOptgroup = document.createElement('optgroup'); 
+                    const waffenOptgroup = document.createElement('optgroup');
                     waffenOptgroup.label = type;
                     waffenOfType.forEach(w => { waffenOptgroup.innerHTML += `<option value="${w.hersteller}-${w.modell}">${w.hersteller} ${w.modell}</option>`; });
                     waffenSelect.appendChild(waffenOptgroup);
                 }
-                
+            });
+            waffenSelect.value = currentWaffe;
+        }
+
+        function updateMunitionDropdown(allowedMunitionArten) {
+            const munitionSelect = document.getElementById('munitionSelect');
+            const currentMunition = munitionSelect.value;
+            munitionSelect.innerHTML = '<option value="">Munition wählen</option>';
+            
+            const munitionArray = state.munitionen || [];
+            allowedMunitionArten.forEach(type => {
                 const munitionOfType = munitionArray.filter(m => m.art === type);
                 if (munitionOfType.length > 0) {
-                    const munitionOptgroup = document.createElement('optgroup'); 
+                    const munitionOptgroup = document.createElement('optgroup');
                     munitionOptgroup.label = type;
                     munitionOfType.forEach(m => { munitionOptgroup.innerHTML += `<option value="${m.name}">${m.name}</option>`; });
                     munitionSelect.appendChild(munitionOptgroup);
                 }
             });
-
-            munitionArray.forEach(m => { kaufMunitionSelect.innerHTML += `<option value="${m.id}">${m.name} (${m.kaliber})</option>`; });
-
-            waffenSelect.value = currentWaffe;
             munitionSelect.value = currentMunition;
-            kaufMunitionSelect.value = currentKaufMunition;
         }
+
+        function updateKaufMunitionDropdown() {
+             const kaufMunitionSelect = document.getElementById('kaufMunitionSelect');
+             const currentKaufMunition = kaufMunitionSelect.value;
+             kaufMunitionSelect.innerHTML = '<option value="">Munition wählen</option>';
+             const munitionArray = state.munitionen || [];
+             munitionArray.forEach(m => { kaufMunitionSelect.innerHTML += `<option value="${m.id}">${m.name} (${m.kaliber})</option>`; });
+             kaufMunitionSelect.value = currentKaufMunition;
+        }
+
 
         document.getElementById('kaufSpeichernBtn').addEventListener('click', () => {
             const munitionId = document.getElementById('kaufMunitionSelect').value;
@@ -721,9 +726,12 @@
             container.appendChild(totalDiv);
         }
 
-        function updateLocationBasedOptions() {
+        function updateLocationBasedOptions(resetSelections = false) {
             const standortSelect = document.getElementById('standortSelect');
             const entfernungSelect = document.getElementById('entfernungSelect');
+            const waffenSelect = document.getElementById('waffenSelect');
+            const munitionSelect = document.getElementById('munitionSelect');
+            
             const selectedStandort = standortSelect.value;
             const config = standortConfig[selectedStandort];
 
@@ -734,11 +742,46 @@
                 entfernungSelect.innerHTML += `<option value="${dist}">${dist}</option>`;
             });
 
-            updateDropdowns(config.waffenArten);
+            // Update dropdowns based on location config
+            updateWaffenDropdown(config.waffenArten);
+            updateMunitionDropdown(config.waffenArten);
+            updateKaufMunitionDropdown(); // This one is independent
+
+            if (resetSelections) {
+                waffenSelect.value = "";
+                munitionSelect.value = "";
+            }
         }
 
-        document.getElementById('standortSelect').addEventListener('change', updateLocationBasedOptions);
+        // --- Event Listeners for dependent dropdowns ---
+        document.getElementById('standortSelect').addEventListener('change', () => updateLocationBasedOptions(true));
+        
+        // NEW: Event listener to filter ammunition based on selected weapon
+        document.getElementById('waffenSelect').addEventListener('change', (e) => {
+            const selectedValue = e.target.value;
+            const munitionSelect = document.getElementById('munitionSelect');
 
+            // If no weapon is selected, reset ammo to location defaults
+            if (!selectedValue) {
+                const standort = document.getElementById('standortSelect').value;
+                const config = standortConfig[standort];
+                if (config) {
+                    updateMunitionDropdown(config.waffenArten);
+                }
+                return;
+            }
+
+            // Find the weapon to get its type
+            const [hersteller, modell] = selectedValue.split('-');
+            const waffe = (state.waffen || []).find(w => w.hersteller === hersteller && w.modell === modell);
+
+            if (waffe) {
+                // Filter munition dropdown to only the weapon's type
+                updateMunitionDropdown([waffe.art]);
+            }
+             // Reset selection
+            munitionSelect.value = "";
+        });
 
         const serieButtonsContainer = document.getElementById('serieButtons');
         for (let i = 0; i < 10; i++) {
