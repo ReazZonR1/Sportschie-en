@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schieß-App mit Serien & Verwaltung – Cloud</title>
+    <title>Schieß-App mit Serien & Verwaltung – Realtime DB</title>
     <style>
         /* General Styles */
         body { background: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; }
@@ -67,8 +67,8 @@
     <!-- Top Bar for Auth -->
     <div id="topbar">
         <div id="userSection">
-            <div id="userInfo">Nicht angemeldet</div>
-            <button id="loginBtn" class="btn">Mit Google anmelden</button>
+            <div id="userInfo">Initialisiere...</div>
+            <button id="loginBtn" class="btn hidden">Mit Google anmelden</button>
             <button id="logoutBtn" class="btn hidden">Abmelden</button>
         </div>
     </div>
@@ -81,7 +81,7 @@
         <button id="tab4Btn">📦 Munitionskäufe</button>
     </nav>
 
-    <!-- Tab 1: Zielscheibe -->
+    <!-- Tabs Content -->
     <div id="tab1" class="tab active">
         <div class="zentriert">
             <div class="controls">
@@ -100,7 +100,6 @@
                 <button class="action" id="resetSerienBtn" style="background-color: #555;">Serien zurücksetzen</button>
             </div>
             <svg id="scheibe" width="420" height="420" viewBox="0 0 420 420">
-                 <!-- Ringe und Zahlen -->
                 <circle cx="210" cy="210" r="200" stroke="#888" stroke-width="1" fill="none"/><circle cx="210" cy="210" r="150" stroke="#888" stroke-width="1" fill="none"/><circle cx="210" cy="210" r="100" stroke="#888" stroke-width="1" fill="none"/><circle cx="210" cy="210" r="50"  stroke="#888" stroke-width="1" fill="none"/><circle cx="210" cy="210" r="15"  stroke="#888" stroke-width="1" fill="black"/>
                 <text x="210" y="35"  fill="white" text-anchor="middle" font-size="20">7</text><text x="210" y="70"  fill="white" text-anchor="middle" font-size="20">8</text><text x="210" y="120" fill="white" text-anchor="middle" font-size="20">9</text><text x="210" y="165" fill="white" text-anchor="middle" font-size="20">10</text>
             </svg>
@@ -111,8 +110,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Tab 2: Verwaltung -->
     <div id="tab2" class="tab">
         <div class="zentriert">
              <div class="controls">
@@ -124,7 +121,6 @@
                 <button class="action" id="waffeSpeichern">Waffe speichern</button>
             </div>
             <div class="liste" id="waffenListe"></div>
-
             <div class="controls">
                 <h2>Munition hinzufügen</h2>
                 <div class="form-group"><label for="munitionName">Bezeichnung:</label><input id="munitionName" type="text"></div>
@@ -141,8 +137,6 @@
             <div class="liste" id="munitionListe"></div>
         </div>
     </div>
-
-    <!-- Tab 3: Ergebnisse -->
     <div id="tab3" class="tab">
         <div class="zentriert">
             <div class="controls">
@@ -165,8 +159,6 @@
             <div id="ergebnisListe" style="width:100%; max-width: 600px;"></div>
         </div>
     </div>
-
-    <!-- Tab 4: Munitionskäufe -->
     <div id="tab4" class="tab">
         <div class="zentriert">
             <div class="controls">
@@ -195,26 +187,31 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // --- CHANGE: Import from firebase-database instead of firestore ---
+        import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
+        // IMPORTANT: Replace with your actual Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyAyuBqsLg9FzkzSzNMjLplJ1NzZw8Ui0d0",
             authDomain: "sportschie-en.firebaseapp.com",
             projectId: "sportschie-en",
             storageBucket: "sportschie-en.appspot.com",
             messagingSenderId: "599617608840",
-            appId: "1:599617608840:web:b4395f1a9797c6bdfa933d"
+            appId: "1:599617608840:web:b4395f1a9797c6bdfa933d",
+            // --- CHANGE: Add databaseURL for Realtime Database ---
+            databaseURL: "https://sportschie-en-default-rtdb.europe-west1.firebasedatabase.app"
         };
 
         // ========== 1. APP INITIALIZATION ==========
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
+        // --- CHANGE: Initialize Realtime Database ---
+        const db = getDatabase(app);
         
         // ========== 2. GLOBAL STATE & DOM ELEMENTS ==========
         let currentUser = null;
-        let unsubscribeFromData = null;
+        let dataRef = null; // Will hold the reference to user data
         
         let state = {
             waffen: [],
@@ -243,88 +240,83 @@
         logoutBtn.addEventListener('click', () => signOut(auth));
 
         onAuthStateChanged(auth, user => {
-            if (unsubscribeFromData) {
-                unsubscribeFromData();
-                unsubscribeFromData = null;
+            if (dataRef) {
+                // --- CHANGE: Unsubscribe from Realtime Database listener ---
+                off(dataRef);
+                dataRef = null;
+                console.log("Unsubscribed from old data listener.");
             }
+            
             currentUser = user;
             updateUiForAuthState();
             
             if (user) {
+                console.log(`User logged in: ${user.uid} (${user.isAnonymous ? 'anonymous' : user.displayName})`);
                 listenToCloudData();
             } else {
-                loadLocalData();
-                updateAllViews();
+                console.log("No user logged in. Signing in anonymously.");
+                signInAnonymously(auth).catch(error => {
+                    console.error("Anonymous sign-in failed:", error);
+                    userInfo.textContent = "Anmeldung fehlgeschlagen. Bitte Seite neuladen.";
+                });
             }
         });
 
         function updateUiForAuthState() {
-            const loggedIn = !!currentUser;
-            userInfo.innerHTML = loggedIn ? `Angemeldet als <b>${currentUser.displayName}</b>` : "Nicht angemeldet";
-            loginBtn.classList.toggle('hidden', loggedIn);
-            logoutBtn.classList.toggle('hidden', !loggedIn);
+            const isLoggedIn = currentUser && !currentUser.isAnonymous;
+            userInfo.innerHTML = isLoggedIn ? `Angemeldet als <b>${currentUser.displayName}</b>` : "Nicht angemeldet (Anonym)";
+            loginBtn.classList.toggle('hidden', isLoggedIn);
+            logoutBtn.classList.toggle('hidden', !isLoggedIn);
         }
 
         // ========== 4. DATA HANDLING (SINGLE SOURCE OF TRUTH) ==========
         
-        async function updateCloudState() {
+        async function updateStateInCloud() {
             if (!currentUser) {
-                console.warn("Update prevented: User not logged in.");
+                console.warn("Update prevented: User not available.");
                 return;
             }
             try {
                 const cleanState = JSON.parse(JSON.stringify(state));
-                await setDoc(doc(db, 'user-data', currentUser.uid), cleanState);
+                // --- CHANGE: Use set() with ref() for Realtime Database ---
+                await set(ref(db, 'nutzer/' + currentUser.uid), cleanState);
+                console.log("State successfully updated in cloud.");
             } catch (error) {
                 console.error("Error updating cloud state:", error);
-                showAlert("Daten konnten nicht in der Cloud gespeichert werden.");
+                showAlert("Daten konnten nicht in der Cloud gespeichert werden. Fehler: " + error.message);
             }
         }
         
         function listenToCloudData() {
             if (!currentUser) return;
-            unsubscribeFromData = onSnapshot(doc(db, 'user-data', currentUser.uid), (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
+            // --- CHANGE: Define the reference path for Realtime Database ---
+            dataRef = ref(db, 'nutzer/' + currentUser.uid);
+            
+            // --- CHANGE: Use onValue() to listen for data changes ---
+            onValue(dataRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    console.log("Received data from Realtime DB:", data);
+                    // Ensure all state properties are initialized as arrays to prevent errors
                     state.waffen = Array.isArray(data.waffen) ? data.waffen : [];
                     state.munitionen = Array.isArray(data.munitionen) ? data.munitionen : [];
                     state.ergebnisse = Array.isArray(data.ergebnisse) ? data.ergebnisse : [];
                     state.kaeufe = Array.isArray(data.kaeufe) ? data.kaeufe : [];
                 } else {
+                    console.log("No existing data found for this user. Initializing new data.");
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
-                    updateCloudState(); 
+                    // Initial write to create the user's data node
+                    updateStateInCloud();
                 }
                 updateAllViews();
             }, (error) => {
                 console.error("Error listening to cloud data:", error);
-                showAlert("Fehler bei der Daten-Synchronisierung.");
+                showAlert("Fehler bei der Daten-Synchronisierung. Prüfe die Konsole für Details.");
             });
         }
         
-        function saveLocalData() {
-            localStorage.setItem('schiessAppV2_data', JSON.stringify(state));
-        }
-
-        function loadLocalData() {
-            const localData = localStorage.getItem('schiessAppV2_data');
-            let parsedState = {};
-            try {
-                if (localData) {
-                    parsedState = JSON.parse(localData);
-                }
-            } catch (e) {
-                console.error("Error parsing local storage data. Resetting state.", e);
-                parsedState = {};
-            }
-
-            // Defensively set state, ensuring all properties are arrays.
-            state.waffen = Array.isArray(parsedState.waffen) ? parsedState.waffen : [];
-            state.munitionen = Array.isArray(parsedState.munitionen) ? parsedState.munitionen : [];
-            state.ergebnisse = Array.isArray(parsedState.ergebnisse) ? parsedState.ergebnisse : [];
-            state.kaeufe = Array.isArray(parsedState.kaeufe) ? parsedState.kaeufe : [];
-        }
-        
         function updateAllViews() {
+            console.log("Updating all UI views with current state.");
             showWaffen();
             showMunition();
             updateDropdowns();
@@ -352,7 +344,7 @@
             modal.querySelector('.modal-cancel').onclick = () => { modal.style.display = 'none'; };
         }
 
-        // ========== 6. APP LOGIC ==========
+        // ========== 6. APP LOGIC (No changes needed below this line) ==========
         
         document.querySelectorAll('nav button').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -441,15 +433,14 @@
                 standort: document.getElementById('standortSelect').value,
                 waffe: document.getElementById('waffenSelect').selectedOptions[0]?.textContent || '-',
                 munition: document.getElementById('munitionSelect').selectedOptions[0]?.textContent || '-',
-                serien: JSON.parse(JSON.stringify(nichtLeereSerien)) // Deep clone
+                serien: JSON.parse(JSON.stringify(nichtLeereSerien))
             };
 
             state.ergebnisse.push(eintrag);
-            currentUser ? updateCloudState() : saveLocalData();
+            updateStateInCloud();
             showAlert("Ergebnis gespeichert!");
         });
         
-        // --- Ergebnisse anzeigen & filtern ---
         document.getElementById('filterStandort').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterDatum').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterReset').addEventListener('click', () => {
@@ -463,8 +454,9 @@
             const standortFilter = document.getElementById('filterStandort').value;
             const datumFilter = document.getElementById('filterDatum').value;
             container.innerHTML = '';
-
-            const gefilterte = state.ergebnisse.filter(e => {
+            
+            const ergebnisseArray = state.ergebnisse || [];
+            const gefilterte = ergebnisseArray.filter(e => {
                 if (standortFilter && e.standort !== standortFilter) return false;
                 if (datumFilter && e.datum && !e.datum.startsWith(datumFilter)) return false;
                 return true;
@@ -479,11 +471,7 @@
                 const block = document.createElement('div');
                 block.style.cssText = 'margin-bottom:20px; padding:15px; background:#1e1e1e; border-radius: 12px;';
                 const anzeigeDatum = new Date(eintrag.datum).toLocaleString('de-DE');
-                
-                const serienOptionen = Array.isArray(eintrag.serien) ? eintrag.serien.map((s, i) => {
-                    const trefferAnzahl = (s && Array.isArray(s.treffer)) ? s.treffer.length : 0;
-                    return `<option value="${i}">Serie ${s.serieIndex + 1} (${trefferAnzahl} Schuss)</option>`;
-                }).join('') : '';
+                const serienOptionen = Array.isArray(eintrag.serien) ? eintrag.serien.map((s, i) => `<option value="${i}">Serie ${s.serieIndex + 1} (${s.treffer.length} Schuss)</option>`).join('') : '';
 
                 block.innerHTML = `<div style="display:flex; justify-content: space-between; align-items: flex-start;"><div><strong>${anzeigeDatum}</strong><br><small>Standort: ${eintrag.standort} | Waffe: ${eintrag.waffe}</small></div><button class="loeschen-btn" data-id="${eintrag.id}">Löschen</button></div><div style="margin-top:10px; display:flex; gap:10px; align-items: stretch;"><div style="flex:1;"><label>Serie: <select style="width:100%">${serienOptionen}</select></label><div class="serienErgebnis" style="margin-top:8px;"></div></div><div class="serienSVG" style="flex-shrink:0;"></div></div>`;
                 container.appendChild(block);
@@ -492,16 +480,9 @@
                 const anzeigeDiv = block.querySelector('.serienErgebnis');
                 const svgContainer = block.querySelector('.serienSVG');
                 const updateAnzeige = () => {
-                    if (!Array.isArray(eintrag.serien) || eintrag.serien.length === 0) {
-                        anzeigeDiv.innerHTML = `<em>Keine Seriendaten verfügbar.</em>`;
-                        return;
-                    }
-                    const sidx = +select.value;
-                    const gewaehlteSerie = eintrag.serien[sidx];
-                    if (!gewaehlteSerie || !Array.isArray(gewaehlteSerie.treffer)) { 
-                        anzeigeDiv.innerHTML = `<em>Keine Treffer in dieser Serie.</em>`; 
-                        return; 
-                    }
+                    if (!Array.isArray(eintrag.serien) || eintrag.serien.length === 0) { anzeigeDiv.innerHTML = `<em>Keine Seriendaten verfügbar.</em>`; svgContainer.innerHTML = ''; return; }
+                    const gewaehlteSerie = eintrag.serien[+select.value];
+                    if (!gewaehlteSerie || !Array.isArray(gewaehlteSerie.treffer)) { anzeigeDiv.innerHTML = `<em>Keine Treffer in dieser Serie.</em>`; svgContainer.innerHTML = ''; return; }
                     
                     const trefferListe = gewaehlteSerie.treffer;
                     const punkteWerte = trefferListe.map(p => p.wert);
@@ -512,20 +493,17 @@
                     svgContainer.innerHTML = svgString;
                 };
                 select.addEventListener('change', updateAnzeige);
-                if (eintrag.serien && eintrag.serien.length > 0) {
-                    updateAnzeige();
-                }
+                if (eintrag.serien && eintrag.serien.length > 0) updateAnzeige(); else updateAnzeige();
             });
         }
 
         function loescheErgebnis(id) {
             showConfirm("Dieses Ergebnis wirklich endgültig löschen?", () => {
                 state.ergebnisse = state.ergebnisse.filter(e => e.id !== id);
-                currentUser ? updateCloudState() : saveLocalData();
+                updateStateInCloud();
             });
         }
 
-        // --- Verwaltung (Waffen & Munition) ---
         document.getElementById('munitionArt').addEventListener('change', (e) => { document.getElementById('ballistik').classList.toggle('hidden', e.target.value !== 'Langwaffe'); });
         
         document.getElementById('waffeSpeichern').addEventListener('click', () => {
@@ -535,7 +513,7 @@
             const art = document.getElementById('waffenart').value;
             if (hersteller && modell && kaliber) {
                 state.waffen.push({ hersteller, modell, kaliber, art });
-                currentUser ? updateCloudState() : saveLocalData();
+                updateStateInCloud();
                 document.getElementById('hersteller').value = ''; document.getElementById('modell').value = ''; document.getElementById('kaliber').value = '';
             } else { showAlert("Bitte alle Felder für die Waffe ausfüllen."); }
         });
@@ -544,18 +522,14 @@
             const container = document.getElementById('waffenListe');
             container.innerHTML = '<h3>Meine Waffen:</h3>';
             const ul = document.createElement('ul');
-            state.waffen.forEach((w, i) => {
+            const waffenArray = state.waffen || [];
+            waffenArray.forEach((w, i) => {
                 const li = document.createElement('li');
                 li.innerHTML = `<span>${w.hersteller} ${w.modell} | ${w.kaliber} (${w.art})</span>`;
                 const delBtn = document.createElement('button');
-                delBtn.textContent = '❌';
-                delBtn.className = 'loeschen-btn';
-                delBtn.onclick = () => {
-                    state.waffen.splice(i, 1);
-                    currentUser ? updateCloudState() : saveLocalData();
-                };
-                li.appendChild(delBtn);
-                ul.appendChild(li);
+                delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn';
+                delBtn.onclick = () => showConfirm(`Waffe "${w.hersteller} ${w.modell}" wirklich löschen?`, () => { state.waffen.splice(i, 1); updateStateInCloud(); });
+                li.appendChild(delBtn); ul.appendChild(li);
             });
             container.appendChild(ul);
         }
@@ -569,13 +543,11 @@
             const munition = { id: `mun_${Date.now()}`, name, kaliber, gewicht, art };
             if (art === 'Langwaffe') {
                 ['v0', 'v100', 'v200', 'v300', 'e0', 'e100', 'e200', 'e300'].forEach(id => {
-                    const value = document.getElementById(id).value;
-                    const numValue = parseFloat(value);
-                    munition[id] = isNaN(numValue) ? null : numValue;
+                    munition[id] = parseFloat(document.getElementById(id).value) || null;
                 });
             }
             state.munitionen.push(munition);
-            currentUser ? updateCloudState() : saveLocalData();
+            updateStateInCloud();
             document.getElementById('munitionName').value = ''; document.getElementById('munitionKaliber').value = ''; document.getElementById('munitionGewicht').value = '';
         });
 
@@ -583,22 +555,16 @@
             const container = document.getElementById('munitionListe');
             container.innerHTML = '<h3>Meine Munition:</h3>';
             const ul = document.createElement('ul');
-            state.munitionen.forEach((m, i) => {
+            const munitionArray = state.munitionen || [];
+            munitionArray.forEach((m, i) => {
                 let details = `<strong>${m.name}</strong> | ${m.kaliber} | ${m.gewicht}gr`;
-                if (m.art === 'Langwaffe') {
-                    details += `<br><small>V(m/s): ${m.v0 ?? '-'}/${m.v100 ?? '-'}/${m.v200 ?? '-'}/${m.v300 ?? '-'} | E(J): ${m.e0 ?? '-'}/${m.e100 ?? '-'}/${m.e200 ?? '-'}/${m.e300 ?? '-'}</small>`;
-                }
+                if (m.art === 'Langwaffe') { details += `<br><small>V(m/s): ${m.v0 ?? '-'}/${m.v100 ?? '-'}/${m.v200 ?? '-'}/${m.v300 ?? '-'} | E(J): ${m.e0 ?? '-'}/${m.e100 ?? '-'}/${m.e200 ?? '-'}/${m.e300 ?? '-'}</small>`; }
                 const li = document.createElement('li');
                 li.innerHTML = `<div>${details}</div>`;
                 const delBtn = document.createElement('button');
-                delBtn.textContent = '❌';
-                delBtn.className = 'loeschen-btn';
-                delBtn.onclick = () => {
-                    state.munitionen.splice(i, 1);
-                    currentUser ? updateCloudState() : saveLocalData();
-                };
-                li.appendChild(delBtn);
-                ul.appendChild(li);
+                delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn';
+                delBtn.onclick = () => showConfirm(`Munition "${m.name}" wirklich löschen?`, () => { state.munitionen.splice(i, 1); updateStateInCloud(); });
+                li.appendChild(delBtn); ul.appendChild(li);
             });
             container.appendChild(ul);
         }
@@ -607,34 +573,25 @@
             const waffenSelect = document.getElementById('waffenSelect');
             const munitionSelect = document.getElementById('munitionSelect');
             const kaufMunitionSelect = document.getElementById('kaufMunitionSelect');
-            const currentWaffe = waffenSelect.value;
-            const currentMunition = munitionSelect.value;
-            const currentKaufMunition = kaufMunitionSelect.value;
             waffenSelect.innerHTML = '<option value="">Waffe wählen</option>';
             munitionSelect.innerHTML = '<option value="">Munition wählen</option>';
             kaufMunitionSelect.innerHTML = '<option value="">Munition wählen</option>';
+            
+            const waffenArray = state.waffen || [];
+            const munitionArray = state.munitionen || [];
+
             ['Kurzwaffe', 'Langwaffe'].forEach(type => {
-                const waffenOptgroup = document.createElement('optgroup');
-                waffenOptgroup.label = type;
-                state.waffen.filter(w => w.art === type).forEach((w) => { waffenOptgroup.innerHTML += `<option value="${w.hersteller}-${w.modell}">${w.hersteller} ${w.modell}</option>`; });
+                const waffenOptgroup = document.createElement('optgroup'); waffenOptgroup.label = type;
+                waffenArray.filter(w => w.art === type).forEach(w => { waffenOptgroup.innerHTML += `<option value="${w.hersteller}-${w.modell}">${w.hersteller} ${w.modell}</option>`; });
                 waffenSelect.appendChild(waffenOptgroup);
-                const munitionOptgroup = document.createElement('optgroup');
-                munitionOptgroup.label = type;
-                state.munitionen.filter(m => m.art === type).forEach(m => { munitionOptgroup.innerHTML += `<option value="${m.name}">${m.name}</option>`; });
+                
+                const munitionOptgroup = document.createElement('optgroup'); munitionOptgroup.label = type;
+                munitionArray.filter(m => m.art === type).forEach(m => { munitionOptgroup.innerHTML += `<option value="${m.name}">${m.name}</option>`; });
                 munitionSelect.appendChild(munitionOptgroup);
             });
-            state.munitionen.forEach(m => {
-                const option = document.createElement('option');
-                option.value = m.id;
-                option.textContent = `${m.name} (${m.kaliber})`;
-                kaufMunitionSelect.appendChild(option);
-            });
-            waffenSelect.value = currentWaffe;
-            munitionSelect.value = currentMunition;
-            kaufMunitionSelect.value = currentKaufMunition;
+            munitionArray.forEach(m => { kaufMunitionSelect.innerHTML += `<option value="${m.id}">${m.name} (${m.kaliber})</option>`; });
         }
 
-        // --- Munitionskäufe Logic ---
         document.getElementById('kaufSpeichernBtn').addEventListener('click', () => {
             const munitionId = document.getElementById('kaufMunitionSelect').value;
             const haendler = document.getElementById('haendlerInput').value.trim();
@@ -642,16 +599,8 @@
             const preis = document.getElementById('preisInput').value;
             const datum = document.getElementById('kaufdatumInput').value;
             if (!munitionId || !menge || !preis || !datum) { showAlert("Bitte alle Felder für den Kauf ausfüllen."); return; }
-            const kauf = { 
-                id: `kauf_${Date.now()}`, 
-                munitionId, 
-                haendler, 
-                menge: parseFloat(menge) || 0,
-                preis: parseFloat(preis) || 0,
-                datum 
-            };
-            state.kaeufe.push(kauf);
-            currentUser ? updateCloudState() : saveLocalData();
+            state.kaeufe.push({ id: `kauf_${Date.now()}`, munitionId, haendler, menge: parseFloat(menge) || 0, preis: parseFloat(preis) || 0, datum });
+            updateStateInCloud();
             document.getElementById('kaufMunitionSelect').value = ""; document.getElementById('haendlerInput').value = ""; document.getElementById('mengeInput').value = ""; document.getElementById('preisInput').value = ""; document.getElementById('kaufdatumInput').value = "";
         });
 
@@ -659,22 +608,19 @@
             const container = document.getElementById('kaufListe');
             container.innerHTML = '<h3>Kauf-Historie</h3>';
             const ul = document.createElement('ul');
-            // FIX: Ensure state.kaeufe is an array before trying to spread it
-            const kaeufeArray = Array.isArray(state.kaeufe) ? state.kaeufe : [];
-            const sortedKaeufe = [...kaeufeArray].sort((a, b) => new Date(b.datum) - new Date(a.datum));
-            sortedKaeufe.forEach(kauf => {
-                const munition = state.munitionen.find(m => m.id === kauf.munitionId);
+            const kaeufeArray = state.kaeufe || [];
+            const munitionArray = state.munitionen || [];
+            [...kaeufeArray].sort((a, b) => new Date(b.datum) - new Date(a.datum)).forEach(kauf => {
+                const munition = munitionArray.find(m => m.id === kauf.munitionId);
                 const li = document.createElement('li');
                 const munitionInfo = munition ? `${munition.name} (${munition.kaliber})` : 'Unbekannte Munition';
                 const preisProStueck = kauf.menge > 0 ? (kauf.preis / kauf.menge).toFixed(3) : "0.000";
                 const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
                 li.innerHTML = `<div style="flex-grow: 1;"><strong>${munitionInfo}</strong><br><small>Menge: ${kauf.menge} Stk. | Preis: ${kauf.preis.toFixed(2)}€ (${preisProStueck}€/Stk.)</small><br><small>Händler: ${kauf.haendler || '-'} | Datum: ${kaufDatum}</small></div>`;
                 const delBtn = document.createElement('button');
-                delBtn.textContent = '❌';
-                delBtn.className = 'loeschen-btn';
+                delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn';
                 delBtn.onclick = () => loescheKauf(kauf.id);
-                li.appendChild(delBtn);
-                ul.appendChild(li);
+                li.appendChild(delBtn); ul.appendChild(li);
             });
             container.appendChild(ul);
         }
@@ -682,18 +628,14 @@
         function loescheKauf(kaufId) {
             showConfirm("Diesen Kauf wirklich löschen?", () => {
                 state.kaeufe = state.kaeufe.filter(k => k.id !== kaufId);
-                currentUser ? updateCloudState() : saveLocalData();
+                updateStateInCloud();
             });
         }
 
-        // Initialize App
         const serieButtonsContainer = document.getElementById('serieButtons');
         for (let i = 0; i < 10; i++) {
             const b = document.createElement('button');
-            b.textContent = i + 1;
-            b.type = 'button';
-            b.style.backgroundColor = colors[i];
-            b.style.border = `2px solid ${colors[i]}`;
+            b.textContent = i + 1; b.type = 'button'; b.style.backgroundColor = colors[i]; b.style.border = `2px solid ${colors[i]}`;
             if (i === 0) b.classList.add('activeSerie');
             b.addEventListener('click', () => {
                 aktiveSerieIndex = i;
