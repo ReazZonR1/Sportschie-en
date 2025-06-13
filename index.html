@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schieß-App mit Serien & Verwaltung – Realtime DB</title>
-    <!-- Dummy-Favicon, um 404-Fehler in der Konsole zu vermeiden -->
+    <!-- Dummy favicon to prevent 404 errors in the console -->
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>
-        /* Allgemeine Stile */
+        /* General Styles */
         body { background: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; }
         h1, h2, h3 { color: #f1f1f1; font-weight: 600; }
         
-        /* Layout & Container */
+        /* Layout & Containers */
         #topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; flex-wrap: wrap; gap: 10px; }
         #userSection { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         #userInfo { font-size: 1em; }
@@ -34,12 +34,12 @@
         nav button:hover { color: white; }
         nav button.active { color:white; border-bottom:3px solid #d32f2f; }
         
-        /* Formularelemente */
+        /* Form Elements */
         select, input[type="text"], input[type="number"], input[type="date"] { width:100%; padding:10px; font-size:1em; box-sizing:border-box; background: #333; color: white; border: 1px solid #555; border-radius: 8px; }
         label { display: block; margin-bottom: 5px; font-size: 0.9em; color: #ccc; }
         .form-group { margin-bottom:15px; }
 
-        /* Zielscheibe & Ergebnisse */
+        /* Target & Results */
         #serieButtons { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; justify-content:center; }
         #serieButtons button { background:#444; color:white; padding:4px 10px; border:none; border-radius:4px; cursor:pointer; font-size:.9em; }
         #serieButtons button.activeSerie { outline:2px solid #d32f2f; transform: scale(1.1); }
@@ -48,7 +48,7 @@
         ul { padding-left: 0; list-style-type: none; }
         ul li { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; background: #333; padding: 8px; border-radius: 6px;}
         
-        /* Stile für aufklappbare Zusammenfassung */
+        /* Styles for expandable summary */
         #kaufZusammenfassung .summary-item {
             cursor: pointer;
             transition: background-color 0.2s;
@@ -69,7 +69,7 @@
             padding-left: 10px;
          }
         
-        /* Modal-Stile */
+        /* Modal Styles */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: #1e1e1e; padding: 25px; border-radius: 12px; text-align: center; max-width: 350px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         .modal-message { margin-bottom: 20px; font-size: 1.1em; line-height: 1.5; }
@@ -87,7 +87,7 @@
     </style>
 </head>
 <body>
-    <!-- Top-Leiste für Authentifizierung -->
+    <!-- Top Bar for Authentication -->
     <div id="topbar">
         <div id="userSection">
             <div id="userInfo">Initialisiere...</div>
@@ -104,7 +104,7 @@
         <button id="tab4Btn">📦 Munitionskäufe</button>
     </nav>
 
-    <!-- Tab-Inhalte -->
+    <!-- Tab Contents -->
     <div id="tab1" class="tab active">
         <div class="zentriert">
             <div class="controls">
@@ -214,7 +214,7 @@
     <script type="module">
         // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         // Your web app's Firebase configuration
@@ -287,42 +287,49 @@
 
         logoutBtn.addEventListener('click', () => signOut(auth));
 
+        // This is the main controller for auth state changes
         onAuthStateChanged(auth, user => {
             if (dataRef) {
-                off(dataRef);
+                off(dataRef); // Unsubscribe from any active database listener
                 dataRef = null;
-                console.log("Unsubscribed from old data listener.");
             }
             
-            currentUser = user;
-            updateUiForAuthState();
+            currentUser = user; // Update the global user object
             
             if (user) {
-                console.log(`User logged in: ${user.uid} (${user.isAnonymous ? 'anonymous' : user.displayName})`);
-                listenToCloudData();
+                // A user is logged in with Google
+                console.log(`User logged in: ${user.uid} (${user.displayName})`);
+                listenToCloudData(); // Switch to cloud data
             } else {
-                console.log("No user logged in. Signing in anonymously.");
-                signInAnonymously(auth).catch(error => {
-                    console.error("Anonymous sign-in failed:", error);
-                    userInfo.textContent = "Anmeldung fehlgeschlagen. Bitte Seite neuladen.";
-                });
+                // No user is logged in (guest mode)
+                console.log("No user logged in. Operating in local/guest mode.");
+                loadLocalData(); // Load data from localStorage
+                updateAllViews(); // Update UI with local data
             }
+            updateUiForAuthState(); // Update buttons and user info text
         });
 
         function updateUiForAuthState() {
-            const isLoggedIn = currentUser && !currentUser.isAnonymous;
-            userInfo.innerHTML = isLoggedIn ? `Angemeldet als <b>${currentUser.displayName}</b>` : "Nicht angemeldet (Anonym)";
+            const isLoggedIn = !!currentUser;
+            userInfo.innerHTML = isLoggedIn ? `Angemeldet als <b>${currentUser.displayName}</b>` : "Gastmodus (Daten lokal gespeichert)";
             loginBtn.classList.toggle('hidden', isLoggedIn);
             logoutBtn.classList.toggle('hidden', !isLoggedIn);
         }
 
-        // ========== 4. DATA HANDLING (SINGLE SOURCE OF TRUTH) ==========
+        // ========== 4. DATA HANDLING (HYBRID LOCAL/CLOUD) ==========
         
-        async function updateStateInCloud() {
-            if (!currentUser) {
-                console.warn("Update prevented: User not available.");
-                return;
+        // Universal save function that decides where to save data
+        function saveData() {
+            if (currentUser) {
+                updateStateInCloud();
+            } else {
+                saveLocalData();
             }
+        }
+        
+        // Save state to Firebase Realtime Database
+        async function updateStateInCloud() {
+            if (!currentUser) return;
             try {
                 const cleanState = JSON.parse(JSON.stringify(state));
                 await set(ref(db, 'nutzer/' + currentUser.uid), cleanState);
@@ -332,7 +339,41 @@
                 showAlert("Daten konnten nicht in der Cloud gespeichert werden. Fehler: " + error.message);
             }
         }
+
+        // Save state to the browser's localStorage
+        function saveLocalData() {
+            try {
+                localStorage.setItem('schiessAppV3_data', JSON.stringify(state));
+                console.log("State saved to localStorage.");
+            } catch (e) {
+                console.error("Error saving to localStorage", e);
+                showAlert("Daten konnten nicht lokal gespeichert werden. Der Speicher ist möglicherweise voll.");
+            }
+        }
+
+        // Load data from localStorage
+        function loadLocalData() {
+            const localData = localStorage.getItem('schiessAppV3_data');
+            if (localData) {
+                try {
+                    const parsedData = JSON.parse(localData);
+                    // Ensure all properties are arrays to prevent errors
+                    state.waffen = Array.isArray(parsedData.waffen) ? parsedData.waffen : [];
+                    state.munitionen = Array.isArray(parsedData.munitionen) ? parsedData.munitionen : [];
+                    state.ergebnisse = Array.isArray(parsedData.ergebnisse) ? parsedData.ergebnisse : [];
+                    state.kaeufe = Array.isArray(parsedData.kaeufe) ? parsedData.kaeufe : [];
+                    console.log("Loaded data from localStorage.");
+                } catch (e) {
+                    console.error("Error parsing local data, resetting state.", e);
+                    state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
+                }
+            } else {
+                // If no local data, start with a fresh state
+                state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
+            }
+        }
         
+        // Listen for realtime updates from Firebase
         function listenToCloudData() {
             if (!currentUser) return;
             dataRef = ref(db, 'nutzer/' + currentUser.uid);
@@ -340,15 +381,15 @@
             onValue(dataRef, (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
-                    console.log("Received data from Realtime DB:", data);
+                    console.log("Received data from Realtime DB, overwriting local state.");
                     state.waffen = Array.isArray(data.waffen) ? data.waffen : [];
                     state.munitionen = Array.isArray(data.munitionen) ? data.munitionen : [];
                     state.ergebnisse = Array.isArray(data.ergebnisse) ? data.ergebnisse : [];
                     state.kaeufe = Array.isArray(data.kaeufe) ? data.kaeufe : [];
                 } else {
-                    console.log("No existing data found for this user. Initializing new data.");
+                    console.log("No existing cloud data found. Creating initial document.");
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
-                    updateStateInCloud();
+                    updateStateInCloud(); // Initial save
                 }
                 updateAllViews();
             }, (error) => {
@@ -357,6 +398,7 @@
             });
         }
         
+        // Universal function to refresh all parts of the UI
         function updateAllViews() {
             console.log("Updating all UI views with current state.");
             showWaffen();
@@ -481,7 +523,7 @@
             };
 
             state.ergebnisse.push(eintrag);
-            updateStateInCloud();
+            saveData();
             showAlert("Ergebnis gespeichert!");
         });
         
@@ -546,7 +588,7 @@
         function loescheErgebnis(id) {
             showConfirm("Dieses Ergebnis wirklich endgültig löschen?", () => {
                 state.ergebnisse = state.ergebnisse.filter(e => e.id !== id);
-                updateStateInCloud();
+                saveData();
             });
         }
 
@@ -560,7 +602,7 @@
             const art = document.getElementById('waffenart').value;
             if (hersteller && modell && kaliber) {
                 state.waffen.push({ hersteller, modell, kaliber, art });
-                updateStateInCloud();
+                saveData();
                 document.getElementById('hersteller').value = ''; document.getElementById('modell').value = ''; document.getElementById('kaliber').value = '';
             } else { showAlert("Bitte alle Felder für die Waffe ausfüllen."); }
         });
@@ -575,7 +617,7 @@
                 li.innerHTML = `<span>${w.hersteller} ${w.modell} | ${w.kaliber} (${w.art})</span>`;
                 const delBtn = document.createElement('button');
                 delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn';
-                delBtn.onclick = () => showConfirm(`Waffe "${w.hersteller} ${w.modell}" wirklich löschen?`, () => { state.waffen.splice(i, 1); updateStateInCloud(); });
+                delBtn.onclick = () => showConfirm(`Waffe "${w.hersteller} ${w.modell}" wirklich löschen?`, () => { state.waffen.splice(i, 1); saveData(); });
                 li.appendChild(delBtn); ul.appendChild(li);
             });
             container.appendChild(ul);
@@ -594,7 +636,7 @@
                 });
             }
             state.munitionen.push(munition);
-            updateStateInCloud();
+            saveData();
             document.getElementById('munitionName').value = ''; document.getElementById('munitionKaliber').value = ''; document.getElementById('munitionGewicht').value = '';
         });
 
@@ -610,7 +652,7 @@
                 li.innerHTML = `<div>${details}</div>`;
                 const delBtn = document.createElement('button');
                 delBtn.textContent = '❌'; delBtn.className = 'loeschen-btn';
-                delBtn.onclick = () => showConfirm(`Munition "${m.name}" wirklich löschen?`, () => { state.munitionen.splice(i, 1); updateStateInCloud(); });
+                delBtn.onclick = () => showConfirm(`Munition "${m.name}" wirklich löschen?`, () => { state.munitionen.splice(i, 1); saveData(); });
                 li.appendChild(delBtn); ul.appendChild(li);
             });
             container.appendChild(ul);
@@ -672,7 +714,7 @@
             if (!munitionId || !menge || !preis || !datum) { showAlert("Bitte alle Felder für den Kauf ausfüllen."); return; }
             const kaeufeArray = state.kaeufe || [];
             state.kaeufe = [...kaeufeArray, { id: `kauf_${Date.now()}`, munitionId, haendler, menge: parseFloat(menge) || 0, preis: parseFloat(preis) || 0, datum }];
-            updateStateInCloud();
+            saveData();
             document.getElementById('kaufMunitionSelect').value = ""; document.getElementById('haendlerInput').value = ""; document.getElementById('mengeInput').value = ""; document.getElementById('preisInput').value = ""; document.getElementById('kaufdatumInput').value = "";
         });
 
@@ -700,7 +742,7 @@
         function loescheKauf(kaufId) {
             showConfirm("Diesen Kauf wirklich löschen?", () => {
                 state.kaeufe = (state.kaeufe || []).filter(k => k.id !== kaufId);
-                updateStateInCloud();
+                saveData();
             });
         }
         
