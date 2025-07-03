@@ -206,10 +206,12 @@
     </div>
 
     <script type="module">
+        // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
+        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAyuBqsLg9FzkzSzNMjLplJ1NzZw8Ui0d0",
             authDomain: "sportschie-en.firebaseapp.com",
@@ -220,10 +222,12 @@
             databaseURL: "https://sportschie-en-default-rtdb.europe-west1.firebasedatabase.app"
         };
 
+        // ========== 1. APP INITIALIZATION ==========
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
         
+        // ========== 2. GLOBAL STATE & DOM ELEMENTS ==========
         let currentUser = null;
         let dataRef = null; 
         
@@ -234,18 +238,35 @@
             kaeufe: [],
         };
         
+        // Configuration for location-based options
         const standortConfig = {
-            Gondsroth: { entfernungen: ["25 m", "50 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] },
-            Jügesheim: { entfernungen: ["50 m", "100 m"], waffenArten: ["Langwaffe"] },
-            Mittelbuchen: { entfernungen: ["25 m", "50 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] },
-            'Klein-Welzheim': { entfernungen: ["25 m", "50 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] },
-            Arlsfeld: { entfernungen: ["25 m", "50 m", "100 m", "300 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] }
+            Gondsroth: {
+                entfernungen: ["25 m", "50 m"],
+                waffenArten: ["Kurzwaffe", "Langwaffe"]
+            },
+            Jügesheim: {
+                entfernungen: ["50 m", "100 m"],
+                waffenArten: ["Langwaffe"]
+            },
+            Mittelbuchen: {
+                entfernungen: ["25 m", "50 m"],
+                waffenArten: ["Kurzwaffe", "Langwaffe"]
+            },
+            'Klein-Welzheim': {
+                entfernungen: ["25 m", "50 m"],
+                waffenArten: ["Kurzwaffe", "Langwaffe"]
+            },
+            Arlsfeld: {
+                entfernungen: ["25 m", "50 m", "100 m", "300 m"],
+                waffenArten: ["Kurzwaffe", "Langwaffe"]
+            }
         };
 
         const colors = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
         let serien = Array.from({length: 10}, () => []);
         let aktiveSerieIndex = 0;
 
+        // ========== 3. AUTHENTICATION ==========
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
         const userInfo = document.getElementById('userInfo');
@@ -260,19 +281,26 @@
 
         logoutBtn.addEventListener('click', () => signOut(auth));
 
+        // This is the main controller for auth state changes
         onAuthStateChanged(auth, user => {
             if (dataRef) {
-                off(dataRef);
+                off(dataRef); // Unsubscribe from any active database listener
                 dataRef = null;
             }
-            currentUser = user;
+            
+            currentUser = user; // Update the global user object
+            
             if (user) {
-                listenToCloudData();
+                // A user is logged in with Google
+                console.log(`User logged in: ${user.uid} (${user.displayName})`);
+                listenToCloudData(); // Switch to cloud data
             } else {
-                loadLocalData();
-                updateAllViews();
+                // No user is logged in (guest mode)
+                console.log("No user logged in. Operating in local/guest mode.");
+                loadLocalData(); // Load data from localStorage
+                updateAllViews(); // Update UI with local data
             }
-            updateUiForAuthState();
+            updateUiForAuthState(); // Update buttons and user info text
         });
 
         function updateUiForAuthState() {
@@ -282,74 +310,92 @@
             logoutBtn.classList.toggle('hidden', !isLoggedIn);
         }
 
+        // ========== 4. DATA HANDLING (HYBRID LOCAL/CLOUD) ==========
+        
+        // Universal save function that decides where to save data
         function saveData() {
             if (currentUser) {
                 updateStateInCloud();
             } else {
                 saveLocalData();
-                updateAllViews();
+                updateAllViews(); // FIX: Refresh UI after local save
             }
         }
         
+        // Save state to Firebase Realtime Database
         async function updateStateInCloud() {
             if (!currentUser) return;
             try {
                 const cleanState = JSON.parse(JSON.stringify(state));
                 await set(ref(db, 'nutzer/' + currentUser.uid), cleanState);
+                console.log("State successfully updated in cloud.");
             } catch (error) {
                 console.error("Error updating cloud state:", error);
                 showAlert("Daten konnten nicht in der Cloud gespeichert werden. Fehler: " + error.message);
             }
         }
 
+        // Save state to the browser's localStorage
         function saveLocalData() {
             try {
                 localStorage.setItem('schiessAppV3_data', JSON.stringify(state));
+                console.log("State saved to localStorage.");
             } catch (e) {
                 console.error("Error saving to localStorage", e);
                 showAlert("Daten konnten nicht lokal gespeichert werden. Der Speicher ist möglicherweise voll.");
             }
         }
 
+        // Load data from localStorage
         function loadLocalData() {
             const localData = localStorage.getItem('schiessAppV3_data');
             if (localData) {
                 try {
                     const parsedData = JSON.parse(localData);
+                    // Ensure all properties are arrays to prevent errors
                     state.waffen = Array.isArray(parsedData.waffen) ? parsedData.waffen : [];
                     state.munitionen = Array.isArray(parsedData.munitionen) ? parsedData.munitionen : [];
                     state.ergebnisse = Array.isArray(parsedData.ergebnisse) ? parsedData.ergebnisse : [];
                     state.kaeufe = Array.isArray(parsedData.kaeufe) ? parsedData.kaeufe : [];
+                    console.log("Loaded data from localStorage.");
                 } catch (e) {
+                    console.error("Error parsing local data, resetting state.", e);
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
                 }
             } else {
+                // If no local data, start with a fresh state
                 state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
             }
         }
         
+        // Listen for realtime updates from Firebase
         function listenToCloudData() {
             if (!currentUser) return;
             dataRef = ref(db, 'nutzer/' + currentUser.uid);
+            
             onValue(dataRef, (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
+                    console.log("Received data from Realtime DB, overwriting local state.");
                     state.waffen = Array.isArray(data.waffen) ? data.waffen : [];
                     state.munitionen = Array.isArray(data.munitionen) ? data.munitionen : [];
                     state.ergebnisse = Array.isArray(data.ergebnisse) ? data.ergebnisse : [];
                     state.kaeufe = Array.isArray(data.kaeufe) ? data.kaeufe : [];
                 } else {
+                    console.log("No existing cloud data found. Creating initial document.");
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
-                    updateStateInCloud();
+                    updateStateInCloud(); // Initial save
                 }
                 updateAllViews();
             }, (error) => {
                 console.error("Error listening to cloud data:", error);
-                showAlert("Fehler bei der Daten-Synchronisierung.");
+                showAlert("Fehler bei der Daten-Synchronisierung. Prüfe die Konsole für Details.");
             });
         }
         
+        // Universal function to refresh all parts of the UI
         function updateAllViews() {
+            console.log("Updating all UI views with current state.");
             showWaffen();
             showMunition();
             updateLocationBasedOptions(); 
@@ -358,6 +404,7 @@
             updateKaufZusammenfassung();
         }
 
+        // ========== 5. MODAL (ALERT/CONFIRM) LOGIC ==========
         const modal = document.getElementById('modal');
         const modalMessage = document.getElementById('modalMessage');
         const modalButtons = document.getElementById('modalButtons');
@@ -377,6 +424,8 @@
             modal.querySelector('.modal-cancel').onclick = () => { modal.style.display = 'none'; };
         }
 
+        // ========== 6. APP LOGIC ==========
+        
         document.querySelectorAll('nav button').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelector('nav button.active')?.classList.remove('active');
@@ -387,6 +436,7 @@
             });
         });
 
+        // --- Target Tab Logic ---
         const svg = document.getElementById('scheibe');
         const punkteListeUl = document.getElementById('punkte');
         const gesamtPunkteDiv = document.getElementById('gesamtPunkte');
@@ -479,6 +529,7 @@
             showAlert("Ergebnis gespeichert!");
         });
         
+        // --- Results Tab Logic ---
         document.getElementById('filterStandort').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterDatum').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterReset').addEventListener('click', () => {
@@ -543,6 +594,7 @@
             });
         }
 
+        // --- Management Tab Logic (Weapons & Ammo) ---
         document.getElementById('munitionArt').addEventListener('change', (e) => { document.getElementById('ballistik').classList.toggle('hidden', e.target.value !== 'Langwaffe'); });
         
         document.getElementById('waffeSpeichern').addEventListener('click', () => {
@@ -608,6 +660,7 @@
             container.appendChild(ul);
         }
         
+        // --- Dropdown Update Logic ---
         function updateWaffenDropdown(allowedWaffenArten) {
             const waffenSelect = document.getElementById('waffenSelect');
             const currentWaffe = waffenSelect.value;
@@ -653,6 +706,7 @@
              kaufMunitionSelect.value = currentKaufMunition;
         }
 
+        // --- Purchase Tab Logic ---
         document.getElementById('kaufSpeichernBtn').addEventListener('click', () => {
             const munitionId = document.getElementById('kaufMunitionSelect').value;
             const haendler = document.getElementById('haendlerInput').value.trim();
@@ -706,6 +760,7 @@
                 return;
             }
 
+            // Group purchases by caliber
             const summaryByCaliber = {};
             let totalCost = 0;
 
@@ -728,6 +783,7 @@
             });
 
             const ul = document.createElement('ul');
+            // Create an expandable list item for each caliber
             for (const kaliber in summaryByCaliber) {
                 const summaryData = summaryByCaliber[kaliber];
                 const avgPreis = summaryData.totalMenge > 0 ? (summaryData.totalPreis / summaryData.totalMenge).toFixed(3) : "0.000";
@@ -739,8 +795,10 @@
                 const detailsUl = document.createElement('ul');
                 detailsUl.classList.add('details-list', 'hidden');
 
+                // Sort purchases within the caliber group by date
                 summaryData.kaeufe.sort((a, b) => new Date(b.datum) - new Date(a.datum));
 
+                // Create list items for each individual purchase
                 summaryData.kaeufe.forEach(kauf => {
                     const detailLi = document.createElement('li');
                     const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
@@ -758,7 +816,9 @@
                     detailsUl.appendChild(detailLi);
                 });
 
+                // Add click event to toggle visibility of the details list
                 li.addEventListener('click', (e) => {
+                    // Stop the event from bubbling up to parent elements
                     e.stopPropagation(); 
                     detailsUl.classList.toggle('hidden');
                 });
@@ -768,6 +828,7 @@
             }
             container.appendChild(ul);
 
+            // Display total cost at the end
             const totalDiv = document.createElement('div');
             totalDiv.className = 'gesamt';
             totalDiv.style.marginTop = '15px';
@@ -776,6 +837,7 @@
             container.appendChild(totalDiv);
         }
         
+        // --- Event Listeners for dependent dropdowns ---
         function updateLocationBasedOptions(resetSelections = false) {
             const standortSelect = document.getElementById('standortSelect');
             const entfernungSelect = document.getElementById('entfernungSelect');
@@ -826,6 +888,7 @@
             munitionSelect.value = "";
         });
 
+        // --- Initial Setup ---
         const serieButtonsContainer = document.getElementById('serieButtons');
         for (let i = 0; i < 10; i++) {
             const b = document.createElement('button');
@@ -840,6 +903,7 @@
             serieButtonsContainer.appendChild(b);
         }
 
+        // Call once on initial load to populate dropdowns correctly
         updateLocationBasedOptions(true);
 
     </script>
