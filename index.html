@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schieß-App mit Serien & Verwaltung – Realtime DB</title>
-    <!-- Dummy favicon to prevent 404 errors in the console -->
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <style>
         /* General Styles */
@@ -87,7 +86,6 @@
     </style>
 </head>
 <body>
-    <!-- Top Bar for Authentication -->
     <div id="topbar">
         <div id="userSection">
             <div id="userInfo">Initialisiere...</div>
@@ -96,7 +94,6 @@
         </div>
     </div>
 
-    <!-- Navigation -->
     <nav>
         <button id="tab1Btn" class="active">🎯 Zielscheibe</button>
         <button id="tab2Btn">🧰 Verwaltung</button>
@@ -104,7 +101,6 @@
         <button id="tab4Btn">📦 Munitionskäufe</button>
     </nav>
 
-    <!-- Tab Contents -->
     <div id="tab1" class="tab active">
         <div class="zentriert">
             <div class="controls">
@@ -202,7 +198,6 @@
         </div>
     </div>
     
-    <!-- Custom Modal -->
     <div id="modal" class="modal-overlay">
         <div class="modal-content">
             <p id="modalMessage" class="modal-message"></p>
@@ -210,14 +205,11 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
     <script type="module">
-        // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAyuBqsLg9FzkzSzNMjLplJ1NzZw8Ui0d0",
             authDomain: "sportschie-en.firebaseapp.com",
@@ -228,12 +220,10 @@
             databaseURL: "https://sportschie-en-default-rtdb.europe-west1.firebasedatabase.app"
         };
 
-        // ========== 1. APP INITIALIZATION ==========
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
         
-        // ========== 2. GLOBAL STATE & DOM ELEMENTS ==========
         let currentUser = null;
         let dataRef = null; 
         
@@ -244,35 +234,18 @@
             kaeufe: [],
         };
         
-        // Configuration for location-based options
         const standortConfig = {
-            Gondsroth: {
-                entfernungen: ["25 m", "50 m"],
-                waffenArten: ["Kurzwaffe", "Langwaffe"]
-            },
-            Jügesheim: {
-                entfernungen: ["50 m", "100 m"],
-                waffenArten: ["Langwaffe"]
-            },
-            Mittelbuchen: {
-                entfernungen: ["25 m", "50 m"],
-                waffenArten: ["Kurzwaffe", "Langwaffe"]
-            },
-            'Klein-Welzheim': {
-                entfernungen: ["25 m", "50 m"],
-                waffenArten: ["Kurzwaffe", "Langwaffe"]
-            },
-            Arlsfeld: {
-                entfernungen: ["25 m", "50 m", "100 m", "300 m"],
-                waffenArten: ["Kurzwaffe", "Langwaffe"]
-            }
+            Gondsroth: { entfernungen: ["25 m", "50 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] },
+            Jügesheim: { entfernungen: ["50 m", "100 m"], waffenArten: ["Langwaffe"] },
+            Mittelbuchen: { entfernungen: ["25 m", "50 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] },
+            'Klein-Welzheim': { entfernungen: ["25 m", "50 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] },
+            Arlsfeld: { entfernungen: ["25 m", "50 m", "100 m", "300 m"], waffenArten: ["Kurzwaffe", "Langwaffe"] }
         };
 
         const colors = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'];
         let serien = Array.from({length: 10}, () => []);
         let aktiveSerieIndex = 0;
 
-        // ========== 3. AUTHENTICATION ==========
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
         const userInfo = document.getElementById('userInfo');
@@ -287,26 +260,19 @@
 
         logoutBtn.addEventListener('click', () => signOut(auth));
 
-        // This is the main controller for auth state changes
         onAuthStateChanged(auth, user => {
             if (dataRef) {
-                off(dataRef); // Unsubscribe from any active database listener
+                off(dataRef);
                 dataRef = null;
             }
-            
-            currentUser = user; // Update the global user object
-            
+            currentUser = user;
             if (user) {
-                // A user is logged in with Google
-                console.log(`User logged in: ${user.uid} (${user.displayName})`);
-                listenToCloudData(); // Switch to cloud data
+                listenToCloudData();
             } else {
-                // No user is logged in (guest mode)
-                console.log("No user logged in. Operating in local/guest mode.");
-                loadLocalData(); // Load data from localStorage
-                updateAllViews(); // Update UI with local data
+                loadLocalData();
+                updateAllViews();
             }
-            updateUiForAuthState(); // Update buttons and user info text
+            updateUiForAuthState();
         });
 
         function updateUiForAuthState() {
@@ -316,92 +282,74 @@
             logoutBtn.classList.toggle('hidden', !isLoggedIn);
         }
 
-        // ========== 4. DATA HANDLING (HYBRID LOCAL/CLOUD) ==========
-        
-        // Universal save function that decides where to save data
         function saveData() {
             if (currentUser) {
                 updateStateInCloud();
             } else {
                 saveLocalData();
-                updateAllViews(); // FIX: Refresh UI after local save
+                updateAllViews();
             }
         }
         
-        // Save state to Firebase Realtime Database
         async function updateStateInCloud() {
             if (!currentUser) return;
             try {
                 const cleanState = JSON.parse(JSON.stringify(state));
                 await set(ref(db, 'nutzer/' + currentUser.uid), cleanState);
-                console.log("State successfully updated in cloud.");
             } catch (error) {
                 console.error("Error updating cloud state:", error);
                 showAlert("Daten konnten nicht in der Cloud gespeichert werden. Fehler: " + error.message);
             }
         }
 
-        // Save state to the browser's localStorage
         function saveLocalData() {
             try {
                 localStorage.setItem('schiessAppV3_data', JSON.stringify(state));
-                console.log("State saved to localStorage.");
             } catch (e) {
                 console.error("Error saving to localStorage", e);
                 showAlert("Daten konnten nicht lokal gespeichert werden. Der Speicher ist möglicherweise voll.");
             }
         }
 
-        // Load data from localStorage
         function loadLocalData() {
             const localData = localStorage.getItem('schiessAppV3_data');
             if (localData) {
                 try {
                     const parsedData = JSON.parse(localData);
-                    // Ensure all properties are arrays to prevent errors
                     state.waffen = Array.isArray(parsedData.waffen) ? parsedData.waffen : [];
                     state.munitionen = Array.isArray(parsedData.munitionen) ? parsedData.munitionen : [];
                     state.ergebnisse = Array.isArray(parsedData.ergebnisse) ? parsedData.ergebnisse : [];
                     state.kaeufe = Array.isArray(parsedData.kaeufe) ? parsedData.kaeufe : [];
-                    console.log("Loaded data from localStorage.");
                 } catch (e) {
-                    console.error("Error parsing local data, resetting state.", e);
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
                 }
             } else {
-                // If no local data, start with a fresh state
                 state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
             }
         }
         
-        // Listen for realtime updates from Firebase
         function listenToCloudData() {
             if (!currentUser) return;
             dataRef = ref(db, 'nutzer/' + currentUser.uid);
-            
             onValue(dataRef, (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
-                    console.log("Received data from Realtime DB, overwriting local state.");
                     state.waffen = Array.isArray(data.waffen) ? data.waffen : [];
                     state.munitionen = Array.isArray(data.munitionen) ? data.munitionen : [];
                     state.ergebnisse = Array.isArray(data.ergebnisse) ? data.ergebnisse : [];
                     state.kaeufe = Array.isArray(data.kaeufe) ? data.kaeufe : [];
                 } else {
-                    console.log("No existing cloud data found. Creating initial document.");
                     state = { waffen: [], munitionen: [], ergebnisse: [], kaeufe: [] };
-                    updateStateInCloud(); // Initial save
+                    updateStateInCloud();
                 }
                 updateAllViews();
             }, (error) => {
                 console.error("Error listening to cloud data:", error);
-                showAlert("Fehler bei der Daten-Synchronisierung. Prüfe die Konsole für Details.");
+                showAlert("Fehler bei der Daten-Synchronisierung.");
             });
         }
         
-        // Universal function to refresh all parts of the UI
         function updateAllViews() {
-            console.log("Updating all UI views with current state.");
             showWaffen();
             showMunition();
             updateLocationBasedOptions(); 
@@ -410,7 +358,6 @@
             updateKaufZusammenfassung();
         }
 
-        // ========== 5. MODAL (ALERT/CONFIRM) LOGIC ==========
         const modal = document.getElementById('modal');
         const modalMessage = document.getElementById('modalMessage');
         const modalButtons = document.getElementById('modalButtons');
@@ -430,8 +377,6 @@
             modal.querySelector('.modal-cancel').onclick = () => { modal.style.display = 'none'; };
         }
 
-        // ========== 6. APP LOGIC ==========
-        
         document.querySelectorAll('nav button').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelector('nav button.active')?.classList.remove('active');
@@ -442,22 +387,28 @@
             });
         });
 
-        // --- Target Tab Logic ---
         const svg = document.getElementById('scheibe');
         const punkteListeUl = document.getElementById('punkte');
         const gesamtPunkteDiv = document.getElementById('gesamtPunkte');
         
         svg.addEventListener('click', e => {
             const r = svg.getBoundingClientRect();
-            const x = e.clientX - r.left;
-            const y = e.clientY - r.top;
-            const dist = Math.hypot(x - (r.width / 2), y - (r.height / 2));
-            const scale = r.width / 420;
+            const clickX = e.clientX - r.left;
+            const clickY = e.clientY - r.top;
+            const svgX = (clickX / r.width) * 420;
+            const svgY = (clickY / r.height) * 420;
+            const dist = Math.hypot(svgX - 210, svgY - 210);
             let wert = 6;
-            if (dist <= 15 * scale) wert = 10; else if (dist <= 50 * scale) wert = 10; else if (dist <= 100 * scale) wert = 9; else if (dist <= 150 * scale) wert = 8; else if (dist <= 200 * scale) wert = 7;
-            const trefferPunkt = { x, y, wert, id: `t${Date.now()}${Math.random()}` };
+            if (dist <= 15) wert = 10;
+            else if (dist <= 50) wert = 10;
+            else if (dist <= 100) wert = 9;
+            else if (dist <= 150) wert = 8;
+            else if (dist <= 200) wert = 7;
+            const trefferPunkt = { x: svgX, y: svgY, wert, id: `t${Date.now()}${Math.random()}` };
             const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3);
+            c.setAttribute('cx', svgX);
+            c.setAttribute('cy', svgY);
+            c.setAttribute('r', 3);
             c.setAttribute('fill', colors[aktiveSerieIndex]);
             c.dataset.trefferId = trefferPunkt.id;
             c.classList.add('treffer');
@@ -528,7 +479,6 @@
             showAlert("Ergebnis gespeichert!");
         });
         
-        // --- Results Tab Logic ---
         document.getElementById('filterStandort').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterDatum').addEventListener('change', updateErgebnisListe);
         document.getElementById('filterReset').addEventListener('click', () => {
@@ -593,7 +543,6 @@
             });
         }
 
-        // --- Management Tab Logic (Weapons & Ammo) ---
         document.getElementById('munitionArt').addEventListener('change', (e) => { document.getElementById('ballistik').classList.toggle('hidden', e.target.value !== 'Langwaffe'); });
         
         document.getElementById('waffeSpeichern').addEventListener('click', () => {
@@ -659,7 +608,6 @@
             container.appendChild(ul);
         }
         
-        // --- Dropdown Update Logic ---
         function updateWaffenDropdown(allowedWaffenArten) {
             const waffenSelect = document.getElementById('waffenSelect');
             const currentWaffe = waffenSelect.value;
@@ -705,7 +653,6 @@
              kaufMunitionSelect.value = currentKaufMunition;
         }
 
-        // --- Purchase Tab Logic ---
         document.getElementById('kaufSpeichernBtn').addEventListener('click', () => {
             const munitionId = document.getElementById('kaufMunitionSelect').value;
             const haendler = document.getElementById('haendlerInput').value.trim();
@@ -759,7 +706,6 @@
                 return;
             }
 
-            // Group purchases by caliber
             const summaryByCaliber = {};
             let totalCost = 0;
 
@@ -782,7 +728,6 @@
             });
 
             const ul = document.createElement('ul');
-            // Create an expandable list item for each caliber
             for (const kaliber in summaryByCaliber) {
                 const summaryData = summaryByCaliber[kaliber];
                 const avgPreis = summaryData.totalMenge > 0 ? (summaryData.totalPreis / summaryData.totalMenge).toFixed(3) : "0.000";
@@ -794,10 +739,8 @@
                 const detailsUl = document.createElement('ul');
                 detailsUl.classList.add('details-list', 'hidden');
 
-                // Sort purchases within the caliber group by date
                 summaryData.kaeufe.sort((a, b) => new Date(b.datum) - new Date(a.datum));
 
-                // Create list items for each individual purchase
                 summaryData.kaeufe.forEach(kauf => {
                     const detailLi = document.createElement('li');
                     const kaufDatum = new Date(kauf.datum).toLocaleDateString('de-DE', { timeZone: 'UTC' });
@@ -815,9 +758,7 @@
                     detailsUl.appendChild(detailLi);
                 });
 
-                // Add click event to toggle visibility of the details list
                 li.addEventListener('click', (e) => {
-                    // Stop the event from bubbling up to parent elements
                     e.stopPropagation(); 
                     detailsUl.classList.toggle('hidden');
                 });
@@ -827,7 +768,6 @@
             }
             container.appendChild(ul);
 
-            // Display total cost at the end
             const totalDiv = document.createElement('div');
             totalDiv.className = 'gesamt';
             totalDiv.style.marginTop = '15px';
@@ -836,7 +776,6 @@
             container.appendChild(totalDiv);
         }
         
-        // --- Event Listeners for dependent dropdowns ---
         function updateLocationBasedOptions(resetSelections = false) {
             const standortSelect = document.getElementById('standortSelect');
             const entfernungSelect = document.getElementById('entfernungSelect');
@@ -887,7 +826,6 @@
             munitionSelect.value = "";
         });
 
-        // --- Initial Setup ---
         const serieButtonsContainer = document.getElementById('serieButtons');
         for (let i = 0; i < 10; i++) {
             const b = document.createElement('button');
@@ -902,7 +840,6 @@
             serieButtonsContainer.appendChild(b);
         }
 
-        // Call once on initial load to populate dropdowns correctly
         updateLocationBasedOptions(true);
 
     </script>
