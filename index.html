@@ -447,24 +447,23 @@
         const punkteListeUl = document.getElementById('punkte');
         const gesamtPunkteDiv = document.getElementById('gesamtPunkte');
         
-svg.addEventListener('click', e => {
-    const r = svg.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const y = e.clientY - r.top;
-    const dist = Math.hypot(x - (r.width / 2), y - (r.height / 2));
-    const scale = r.width / 420;
-    let wert = 6;
-    if (dist <= 15 * scale) wert = 10; else if (dist <= 50 * scale) wert = 10; else if (dist <= 100 * scale) wert = 9; else if (dist <= 150 * scale) wert = 8; else if (dist <= 200 * scale) wert = 7;
-    const trefferPunkt = { x, y, wert, id: `t${Date.now()}${Math.random()}` };
-    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3);
-    c.setAttribute('fill', colors[aktiveSerieIndex]);
-    c.dataset.trefferId = trefferPunkt.id;
-    c.classList.add('treffer');
-    svg.appendChild(c);
-    serien[aktiveSerieIndex].push(trefferPunkt);
-    renderAktiveSerie();
-});
+        svg.addEventListener('click', e => {
+            const r = svg.getBoundingClientRect();
+            const x = e.clientX - r.left;
+            const y = e.clientY - r.top;
+            const dist = Math.hypot(x - (r.width / 2), y - (r.height / 2));
+            const scale = r.width / 420;
+            let wert = 6;
+            if (dist <= 15 * scale) wert = 10; else if (dist <= 50 * scale) wert = 10; else if (dist <= 100 * scale) wert = 9; else if (dist <= 150 * scale) wert = 8; else if (dist <= 200 * scale) wert = 7;
+            const trefferPunkt = { x, y, wert, id: `t${Date.now()}${Math.random()}` };
+            const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3);
+            c.setAttribute('fill', colors[aktiveSerieIndex]);
+            c.dataset.trefferId = trefferPunkt.id;
+            c.classList.add('treffer');
+            svg.appendChild(c);
+            serien[aktiveSerieIndex].push(trefferPunkt);
+            renderAktiveSerie();
         });
 
         function renderAktiveSerie() {
