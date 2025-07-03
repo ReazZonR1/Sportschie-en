@@ -458,7 +458,7 @@
             const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             c.setAttribute('cx', svgX);
             c.setAttribute('cy', svgY);
-            c.setAttribute('r', 3);
+            c.setAttribute('r', 6);
             c.setAttribute('fill', colors[aktiveSerieIndex]);
             c.dataset.trefferId = trefferPunkt.id;
             c.classList.add('treffer');
@@ -577,7 +577,7 @@
                     const trefferListe = gewaehlteSerie.treffer;
                     const punkteWerte = trefferListe.map(p => p.wert);
                     const summe = punkteWerte.reduce((a, b) => a + b, 0);
-                    let svgTreffer = trefferListe.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="cyan" />`).join('');
+                    let svgTreffer = trefferListe.map(p => `<circle cx="${p.x}" cy="${p.y}" r="6" fill="cyan" />`).join('');
                     const svgString = `<svg width="150" height="150" viewBox="0 0 420 420" style="background:#121212; border-radius:50%;"><circle cx="210" cy="210" r="200" stroke="white" fill="none"/><circle cx="210" cy="210" r="150" stroke="white" fill="none"/><circle cx="210" cy="210" r="100" stroke="white" fill="none"/><circle cx="210" cy="210" r="50" stroke="white" fill="none"/><circle cx="210" cy="210" r="15" stroke="white" fill="none"/>${svgTreffer}</svg>`;
                     anzeigeDiv.innerHTML = `<strong>Punkte:</strong> ${punkteWerte.join(', ')}<br><strong>Gesamt:</strong> ${summe} Punkte`;
                     svgContainer.innerHTML = svgString;
